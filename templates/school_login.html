@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block title %}Administrator Sign In · SchoolNet AI{% endblock %}
+
+{% block content %}
+<div style="max-width: 440px; margin: 60px auto;">
+    <section class="panel login-panel" style="padding: 30px;">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <div style="font-size: 32px; color: var(--cyan); margin-bottom: 12px;">
+                <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <div class="eyebrow">AUTHORIZED SECURITY ACCESS</div>
+            <h1 style="font-size: 24px; margin-bottom: 8px;">SchoolNet AI<span class="heading-dot">.</span></h1>
+            <p style="font-size: 13px;">Sign in to access protected administrator investigation functions.</p>
+        </div>
+
+        <form method="post" action="{{ url_for('schoolnet.login') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            
+            <label style="margin-bottom: 18px;">
+                Administrator Password
+                <input type="password" name="password" required autocomplete="current-password" placeholder="Enter administrator password" style="width: 100%; margin-top: 6px;">
+            </label>
+
+            <button type="submit" class="btn btn-cyber-primary" style="width: 100%; padding: 12px;">
+                <i class="fa-solid fa-lock-open"></i> Authenticate & Enter
+            </button>
+        </form>
+
+        <p class="subtle" style="font-size: 11px; text-align: center; margin-top: 20px;">
+            <i class="fa-solid fa-circle-info"></i> Running in restricted local workspace mode.
+        </p>
+    </section>
+</div>
+{% endblock %}

@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+{% block title %}Secure Reports · SchoolNet AI{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+    <div>
+        <div class="eyebrow">CONFIDENTIALITY · INTEGRITY · AUTHENTICITY</div>
+        <h1>Secure reports<span class="heading-dot">.</span></h1>
+        <p>Cryptographically protected investigation reports using authenticated encryption, cryptographic hashing, and RSA digital signatures.</p>
+    </div>
+    {% if analysis %}
+    <form method="get" class="filters">
+        <select name="analysis_id" onchange="this.form.submit()" aria-label="Select capture">
+            {% for a in analyses %}
+            <option value="{{ a.id }}" {{ 'selected' if analysis and analysis.id == a.id }}>
+                {{ a.original_filename }} · {{ a.id[:8] }}
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+    {% endif %}
+</div>
+
+<!-- Cryptographic Concepts Explanation -->
+<div class="dashboard-grid">
+    <section class="panel">
+        <i class="fa-solid fa-lock cyan" style="font-size: 22px; margin-bottom: 12px;"></i>
+        <h2>AES-256-GCM</h2>
+        <span class="pill cyan" style="margin-bottom: 10px;">CONFIDENTIALITY</span>
+        <p>Galois/Counter Mode provides authenticated symmetric encryption. It protects report contents from unauthorized viewing while providing tamper detection (integrity + authenticity) via an authentication tag.</p>
+    </section>
+
+    <section class="panel">
+        <i class="fa-solid fa-fingerprint teal" style="font-size: 22px; margin-bottom: 12px;"></i>
+        <h2>SHA-256 Hashing</h2>
+        <span class="pill good" style="margin-bottom: 10px;">INTEGRITY</span>
+        <p>A deterministic one-way cryptographic hash generates a unique 256-bit digest of both the raw PCAP file and final report artifacts. Any alteration in even a single bit completely changes the hash value.</p>
+    </section>
+
+    <section class="panel">
+        <i class="fa-solid fa-signature purple" style="font-size: 22px; margin-bottom: 12px;"></i>
+        <h2>RSA-PSS Signatures</h2>
+        <span class="pill purple" style="margin-bottom: 10px;">AUTHENTICITY</span>
+        <p>Probabilistic Signature Scheme (PSS) with RSA-2048/SHA-256 provides digital signing. The report digest is signed with a private key; recipients verify authenticity with the public key without exposing the signer.</p>
+    </section>
+</div>
+
+{% if analysis %}
+<!-- PCAP Evidence Integrity -->
+<section class="panel">
+    <div class="panel-heading">
+        <div>
+            <h2>Original PCAP file integrity</h2>
+            <p style="margin: 0; font-size: 12px;">Computed upon file upload to verify the raw capture has not been modified.</p>
+        </div>
+        <button class="btn btn-sm btn-outline-info" data-verify="{{ url_for('schoolnet.verify_pcap', analysis_id=analysis.id) }}">
+            <i class="fa-solid fa-check-double"></i> Verify capture hash
+        </button>
+    </div>
+    <div style="margin-top: 10px;">
+        <span class="subtle" style="font-size: 11px;">SHA-256 DIGEST:</span>
+        <code class="hash">{{ context.pcap_sha256 if context and context.pcap_sha256 else 'Original capture hash unavailable' }}</code>
+    </div>
+    <output class="verification-result"></output>
+</section>
+
+<!-- Generate Report Panel -->
+<section class="panel intelligence-panel">
+    <div class="panel-heading">
+        <h2>Generate protected investigation report</h2>
+        <span class="pill purple">CRYPTO WORKFLOW</span>
+    </div>
+    <p>Export an immutable security investigation dossier combining rule triggers, Isolation Forest anomaly scores, device roles, and attack timeline evidence.</p>
+    
+    <form method="post" action="{{ url_for('schoolnet.reports') }}" class="report-form" style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="analysis_id" value="{{ analysis.id }}">
+        
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" name="encrypt" value="yes" checked>
+            <span><strong>Encrypt with AES-256-GCM</strong> (requires configured secret key)</span>
+        </label>
+        
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" name="sign" value="yes" checked>
+            <span><strong>Sign with RSA-PSS</strong> (using private key)</span>
+        </label>
+        
+        <div style="display: flex; gap: 10px; margin-left: auto;">
+            <button type="submit" class="btn btn-cyber-primary">
+                <i class="fa-solid fa-shield-halved"></i> Finalize protected report
+            </button>
+            <a href="{{ url_for('report_download', analysis_id=analysis.id) }}" class="btn btn-outline-secondary">
+                <i class="fa-solid fa-file-pdf"></i> Plain PDF download
+            </a>
+        </div>
+    </form>
+    
+    <small class="subtle" style="display: block; margin-top: 14px;">
+        <i class="fa-solid fa-circle-exclamation"></i> Encryption keys and RSA private keys remain strictly on the backend server. Decryption is performed authorized on request.
+    </small>
+</section>
+{% endif %}
+
+<!-- Finalized Reports Archive -->
+<section class="panel">
+    <div class="panel-heading">
+        <h2>Finalized report versions</h2>
+        <span class="subtle">{{ reports|length }} STORED DOSSIERS</span>
+    </div>
+
+    {% if reports %}
+        {% for r in reports %}
+        <article class="soc-card" style="margin-bottom: 18px; border: 1px solid var(--line); border-radius: 6px; padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; margin-bottom: 12px;">
+                <div>
+                    <h3 style="margin: 0; font-size: 16px;">
+                        Report <span class="mono cyan">{{ r.id[:8] }}</span>
+                        <small style="display: inline; margin-left: 10px;">{{ r.created_at.strftime('%d %b %Y · %H:%M:%S UTC') if r.created_at else 'Unknown date' }}</small>
+                    </h3>
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                        {% if r.encrypted %}
+                        <span class="pill good"><i class="fa-solid fa-lock"></i> AES-256-GCM Encrypted</span>
+                        {% else %}
+                        <span class="pill"><i class="fa-solid fa-file"></i> Unencrypted PDF</span>
+                        {% endif %}
+
+                        {% if r.signature %}
+                        <span class="pill purple"><i class="fa-solid fa-signature"></i> RSA-PSS Signed</span>
+                        {% else %}
+                        <span class="pill amber"><i class="fa-solid fa-triangle-exclamation"></i> Unsigned</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <button class="btn btn-sm btn-cyber-primary" data-verify="{{ url_for('schoolnet.report_action', rid=r.id, action='verify') }}">
+                    <i class="fa-solid fa-certificate"></i> Verify integrity & signature
+                </button>
+            </div>
+
+            <div style="margin-bottom: 14px;">
+                <span class="subtle" style="font-size: 11px;">REPORT SHA-256:</span>
+                <code class="hash">{{ r.sha256 }}</code>
+            </div>
+
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <!-- Download raw file -->
+                <form method="post" action="{{ url_for('schoolnet.report_action', rid=r.id, action='download') }}" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button class="btn btn-sm btn-outline-info">
+                        <i class="fa-solid fa-download"></i> Download raw ({{ r.filename.split('.')[-1]|upper }})
+                    </button>
+                </form>
+
+                <!-- Authorized Decrypt PDF -->
+                {% if r.encrypted %}
+                <form method="post" action="{{ url_for('schoolnet.report_action', rid=r.id, action='decrypt') }}" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button class="btn btn-sm btn-ai">
+                        <i class="fa-solid fa-unlock-keyhole"></i> Authorized decrypt & view
+                    </button>
+                </form>
+                {% endif %}
+
+                <!-- Download Manifest -->
+                {% if r.signature %}
+                <form method="post" action="{{ url_for('schoolnet.report_action', rid=r.id, action='manifest') }}" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button class="btn btn-sm btn-outline-secondary">
+                        <i class="fa-solid fa-file-code"></i> Signature manifest
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+
+            <output class="verification-result"></output>
+        </article>
+        {% endfor %}
+    {% else %}
+        <div class="empty-small">
+            <i class="fa-solid fa-file-shield" style="font-size: 24px; margin-bottom: 8px; color: var(--text-secondary);"></i>
+            <p>No cryptographically protected reports have been finalized for this capture yet.</p>
+            <small>Use the form above to generate an authenticated report version.</small>
+        </div>
+    {% endif %}
+</section>
+
+{% endblock %}

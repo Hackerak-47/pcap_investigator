@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}All Analyses - Intelligent PCAP Investigator{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h3 class="text-white fw-bold mb-0">
+            <i class="fa-solid fa-folder-tree text-cyber-blue me-2"></i> Ingested PCAP Investigations
+        </h3>
+        <p class="text-secondary small mb-0">Historical repository of parsed packet captures and forensic evaluations.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('upload_page') }}" class="btn btn-cyber-primary btn-sm">
+            <i class="fa-solid fa-cloud-arrow-up me-1"></i> Ingest New PCAP
+        </a>
+    </div>
+</div>
+
+<div class="card bg-surface border border-secondary border-opacity-25 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-cyber align-middle mb-0 font-monospace small">
+                <thead>
+                    <tr>
+                        <th class="ps-3">Original Filename</th>
+                        <th>Analysis ID</th>
+                        <th>Packets</th>
+                        <th>Duration</th>
+                        <th>Created Date</th>
+                        <th>Status</th>
+                        <th class="text-end pe-3">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if analyses %}
+                        {% for a in analyses %}
+                        <tr>
+                            <td class="ps-3 font-monospace text-white fw-semibold">
+                                <i class="fa-solid fa-file-waveform text-info me-2"></i>
+                                <a href="{{ url_for('dashboard', analysis_id=a.id) }}" class="text-info text-decoration-none">
+                                    {{ a.original_filename }}
+                                </a>
+                            </td>
+                            <td class="text-secondary">{{ a.id[:8] }}...</td>
+                            <td>{{ a.packet_count }}</td>
+                            <td>{{ a.duration|format_duration }}</td>
+                            <td class="text-secondary">{{ a.created_at.strftime('%Y-%m-%d %H:%M') if a.created_at else 'N/A' }}</td>
+                            <td>
+                                {% if a.status == 'complete' %}
+                                    <span class="badge bg-success-subtle text-success border border-success border-opacity-25">Complete</span>
+                                {% elif a.status == 'processing' %}
+                                    <span class="badge bg-warning-subtle text-warning border border-warning border-opacity-25">Processing</span>
+                                {% elif a.status == 'error' %}
+                                    <span class="badge bg-danger-subtle text-danger border border-danger border-opacity-25">Error</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ a.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end pe-3">
+                                <a href="{{ url_for('dashboard', analysis_id=a.id) }}" class="btn btn-xs btn-cyber-outline py-1 px-2">
+                                    <i class="fa-solid fa-gauge me-1"></i> Dashboard
+                                </a>
+                                <a href="{{ url_for('timeline', analysis_id=a.id) }}" class="btn btn-xs btn-outline-secondary py-1 px-2">
+                                    Timeline
+                                </a>
+                                <a href="{{ url_for('report_download', analysis_id=a.id) }}" class="btn btn-xs btn-outline-danger py-1 px-2">
+                                    PDF
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-5 text-secondary">
+                                <i class="fa-solid fa-folder-open fs-2 mb-2 d-block"></i>
+                                No investigations recorded yet. 
+                                <a href="{{ url_for('upload_page') }}" class="text-info">Upload a PCAP</a> or 
+                                <a href="{{ url_for('load_demo') }}" class="text-warning">Load Demo Scenario</a>.
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

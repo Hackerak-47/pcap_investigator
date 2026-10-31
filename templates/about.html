@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}About & Detection Methodology - Intelligent PCAP Investigator{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <h2 class="text-white fw-bold mb-1">
+            <i class="fa-solid fa-shield-halved text-cyber-blue me-2"></i> Architecture &amp; Detection Methodology
+        </h2>
+        <p class="text-secondary small mb-4">
+            System design, threat heuristics, risk scoring formulas, and ethical limitations for academic demonstration.
+        </p>
+
+        <!-- 1. System Pipeline Architecture -->
+        <div class="soc-card p-4 mb-4">
+            <h5 class="text-white font-monospace mb-3">1. End-to-End Processing Architecture</h5>
+            <div class="d-flex flex-wrap gap-2 text-center small font-monospace mb-3">
+                <span class="p-2 bg-surface rounded border border-secondary border-opacity-50 flex-grow-1">Raw PCAP File</span>
+                <span class="align-self-center text-secondary">&rarr;</span>
+                <span class="p-2 bg-surface rounded border border-secondary border-opacity-50 flex-grow-1">PyShark Dissector</span>
+                <span class="align-self-center text-secondary">&rarr;</span>
+                <span class="p-2 bg-surface rounded border border-secondary border-opacity-50 flex-grow-1">SQLite Packet Storage</span>
+                <span class="align-self-center text-secondary">&rarr;</span>
+                <span class="p-2 bg-surface rounded border border-secondary border-opacity-50 flex-grow-1">Detection Engine (6 rules)</span>
+                <span class="align-self-center text-secondary">&rarr;</span>
+                <span class="p-2 bg-surface rounded border border-secondary border-opacity-50 flex-grow-1">Temporal Correlation</span>
+                <span class="align-self-center text-secondary">&rarr;</span>
+                <span class="p-2 bg-surface rounded border border-secondary border-opacity-50 flex-grow-1">AI Synthesis &amp; PDF Report</span>
+            </div>
+            <p class="text-secondary small mb-0">
+                The application incrementally parses packets into structured SQLite schemas with secondary indexing on (analysis_id, src_ip, dst_ip, protocol, timestamp), 
+                preventing out-of-memory crashes on large captures.
+            </p>
+        </div>
+
+        <!-- 2. Detection Rules -->
+        <div class="soc-card p-4 mb-4">
+            <h5 class="text-white font-monospace mb-3">2. Threat Detection Rules &amp; Configurable Thresholds</h5>
+            <div class="table-responsive">
+                <table class="table table-cyber font-monospace small align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Detector</th>
+                            <th>Trigger Heuristics</th>
+                            <th>Default Threshold</th>
+                            <th>Target Phase</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="text-info fw-bold">PORT_SCAN</td>
+                            <td>Rapid TCP connection attempts to many unique destination ports (SYN ratio &gt; 70%)</td>
+                            <td>&ge; 10 unique ports / 60s</td>
+                            <td>Reconnaissance</td>
+                        </tr>
+                        <tr>
+                            <td class="text-danger fw-bold">SSH_BRUTE_FORCE</td>
+                            <td>Repeated SYN attempts to TCP port 22 within a sliding temporal window</td>
+                            <td>&ge; 10 attempts / 120s</td>
+                            <td>Credential Access</td>
+                        </tr>
+                        <tr>
+                            <td class="text-warning fw-bold">DNS_ANOMALY</td>
+                            <td>Shannon entropy &gt; 3.8, label lengths &gt; 40 chars, or burst rate &gt; 100/min</td>
+                            <td>Entropy &gt; 3.8 / Label &gt; 40 chars</td>
+                            <td>Exfiltration / C2</td>
+                        </tr>
+                        <tr>
+                            <td class="text-danger fw-bold">SUSPICIOUS_OUTBOUND</td>
+                            <td>Internal client connecting to known backdoor ports (4444, 31337, etc.) or high fan-out</td>
+                            <td>Fanout &gt; 50 or port in Blacklist</td>
+                            <td>Command &amp; Control</td>
+                        </tr>
+                        <tr>
+                            <td class="text-info fw-bold">ICMP_ANOMALY</td>
+                            <td>High burst of ICMP Echo requests across one or multiple targets</td>
+                            <td>&ge; 50 packets / 10s</td>
+                            <td>Reconnaissance Sweep</td>
+                        </tr>
+                        <tr>
+                            <td class="text-warning fw-bold">HTTP_ANOMALY</td>
+                            <td>Abnormal HTTP verbs (CONNECT/TRACE/TRACK) or excessive request bursts</td>
+                            <td>&ge; 200 reqs / 60s</td>
+                            <td>Web Exploitation</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 3. Risk Scoring Methodology -->
+        <div class="soc-card p-4 mb-4">
+            <h5 class="text-white font-monospace mb-3">3. Risk Scoring &amp; Severity Classification</h5>
+            <p class="text-secondary small">
+                Risk scores are evaluated on a bounded 0–100 scale:
+            </p>
+            <div class="row g-3 mb-3">
+                <div class="col-md-3">
+                    <div class="p-3 bg-surface rounded border border-danger border-opacity-25 text-center">
+                        <span class="badge badge-critical mb-1">CRITICAL</span>
+                        <div class="text-white fw-bold font-monospace">80 – 100</div>
+                        <span class="text-secondary small">Confirmed intrusion flow / C2</span>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="p-3 bg-surface rounded border border-warning border-opacity-25 text-center">
+                        <span class="badge badge-high mb-1">HIGH</span>
+                        <div class="text-white fw-bold font-monospace">60 – 79</div>
+                        <span class="text-secondary small">Brute-force / active scan</span>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="p-3 bg-surface rounded border border-warning border-opacity-25 text-center">
+                        <span class="badge badge-medium mb-1">MEDIUM</span>
+                        <div class="text-white fw-bold font-monospace">30 – 59</div>
+                        <span class="text-secondary small">Suspicious DNS / fan-out</span>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="p-3 bg-surface rounded border border-success border-opacity-25 text-center">
+                        <span class="badge badge-low mb-1">LOW</span>
+                        <div class="text-white fw-bold font-monospace">0 – 29</div>
+                        <span class="text-secondary small">Informational sweeps</span>
+                    </div>
+                </div>
+            </div>
+            <div class="p-3 bg-dark rounded border border-secondary border-opacity-50 text-secondary small font-monospace">
+                <code>Score = Base_Type_Score + (Confidence &ge; 0.8 ? +10 : -10) + Evidence_Volume_Bonus + Multi_Target_Bonus</code>
+            </div>
+        </div>
+
+        <!-- 4. Academic & Forensic Limitations -->
+        <div class="soc-card p-4 border-warning border-opacity-50 mb-4">
+            <h5 class="text-warning font-monospace mb-2">
+                <i class="fa-solid fa-triangle-exclamation me-1"></i> Forensic &amp; Legal Disclaimers
+            </h5>
+            <ul class="text-secondary small ps-3 mb-0">
+                <li><strong>PCAP Limitations:</strong> Packet captures demonstrate network traffic transmission, but cannot prove application-layer authentication outcomes or process execution on endpoints without server syslog/EDR correlation.</li>
+                <li><strong>Cautionary Terminology:</strong> Events are labeled as "consistent with", "suggests", and "indicators" rather than absolute assertions of breach.</li>
+                <li><strong>Compliance:</strong> Traffic capture inspection must only occur on authorized networks in compliance with institutional policies and applicable cybersecurity laws.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

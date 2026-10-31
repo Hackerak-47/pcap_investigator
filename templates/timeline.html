@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Attack Timeline - {{ analysis.original_filename }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h3 class="text-white fw-bold mb-0">
+            <i class="fa-solid fa-timeline text-cyber-blue me-2"></i> Chronological Attack Timeline
+        </h3>
+        <p class="text-secondary small mb-0">
+            Reconstructed sequence of events mapped to cyber attack phases (observed vs. analyst inferred).
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('investigation', analysis_id=analysis.id) }}" class="btn btn-cyber-primary btn-sm">
+            <i class="fa-solid fa-brain me-1"></i> View AI Investigation
+        </a>
+    </div>
+</div>
+
+<!-- Timeline Severity Filter -->
+<div class="soc-card p-3 mb-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+            <span class="text-secondary small me-2"><i class="fa-solid fa-filter me-1"></i> Filter Severity:</span>
+            <a href="{{ url_for('timeline', analysis_id=analysis.id) }}" class="btn btn-xs {% if not filters.severity %}btn-cyber-primary{% else %}btn-outline-secondary{% endif %}">
+                All ({{ timeline_events|length }})
+            </a>
+            <a href="{{ url_for('timeline', analysis_id=analysis.id, severity='CRITICAL') }}" class="btn btn-xs {% if filters.severity == 'CRITICAL' %}btn-danger{% else %}btn-outline-danger{% endif %}">
+                Critical
+            </a>
+            <a href="{{ url_for('timeline', analysis_id=analysis.id, severity='HIGH') }}" class="btn btn-xs {% if filters.severity == 'HIGH' %}btn-warning{% else %}btn-outline-warning{% endif %}">
+                High
+            </a>
+            <a href="{{ url_for('timeline', analysis_id=analysis.id, severity='MEDIUM') }}" class="btn btn-xs {% if filters.severity == 'MEDIUM' %}btn-info{% else %}btn-outline-info{% endif %}">
+                Medium
+            </a>
+        </div>
+
+        <div class="d-flex align-items-center gap-2 small text-secondary">
+            <span><i class="fa-solid fa-circle text-danger me-1"></i> Critical</span>
+            <span><i class="fa-solid fa-circle text-warning me-1"></i> High</span>
+            <span><i class="fa-solid fa-circle text-info me-1"></i> Medium</span>
+            <span><span class="badge bg-purple px-1 py-0 me-1" style="background-color: #8b5cf6;">[INFERRED]</span> Hypothesis</span>
+        </div>
+    </div>
+</div>
+
+<!-- Vertical Timeline -->
+<div class="timeline-container px-3">
+    {% if timeline_events %}
+        {% for event in timeline_events %}
+        <div class="timeline-item">
+            <!-- Timeline Icon Circle -->
+            <div class="timeline-icon {{ event.severity }} {% if event.is_inferred %}inferred{% endif %}">
+                {% if event.is_inferred %}
+                    <i class="fa-solid fa-lightbulb"></i>
+                {% elif event.phase == 'RECONNAISSANCE' %}
+                    <i class="fa-solid fa-radar"></i>
+                {% elif event.phase == 'CREDENTIAL_ATTACK' %}
+                    <i class="fa-solid fa-key"></i>
+                {% elif event.phase == 'COMMAND_AND_CONTROL' %}
+                    <i class="fa-solid fa-terminal"></i>
+                {% elif event.phase == 'DATA_EXFILTRATION' %}
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                {% else %}
+                    <i class="fa-solid fa-shield-virus"></i>
+                {% endif %}
+            </div>
+
+            <!-- Timeline Event Content Card -->
+            <div class="timeline-card shadow-sm">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                    <div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <h5 class="text-white mb-0 font-monospace">{{ event.title }}</h5>
+                            
+                            <span class="badge bg-surface border border-secondary text-secondary font-monospace small">
+                                Step #{{ event.sequence_order }}
+                            </span>
+
+                            <span class="badge bg-primary-subtle text-info border border-info border-opacity-25 small font-monospace">
+                                {{ event.phase or 'ATTACK_PHASE' }}
+                            </span>
+
+                            {% if event.is_inferred %}
+                                <span class="badge" style="background-color: #8b5cf6; color: white;">
+                                    <i class="fa-solid fa-brain me-1"></i> INFERRED HYPOTHESIS
+                                </span>
+                            {% else %}
+                                <span class="badge {{ event.severity|severity_badge }}">
+                                    {{ event.severity }}
+                                </span>
+                            {% endif %}
+                        </div>
+
+                        <div class="text-secondary small mt-1 font-monospace">
+                            <i class="fa-regular fa-clock me-1 text-info"></i>
+                            {{ event.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC') if event.timestamp else 'Timestamp approximate' }}
+                        </div>
+                    </div>
+
+                    <div class="font-monospace small text-end">
+                        {% if event.source_ip %}
+                        <div><span class="text-secondary">Src:</span> <span class="text-info">{{ event.source_ip }}</span></div>
+                        {% endif %}
+                        {% if event.destination_ip %}
+                        <div><span class="text-secondary">Dst:</span> <span class="text-light">{{ event.destination_ip }}</span></div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <p class="text-light mb-0 small">
+                    {{ event.description }}
+                </p>
+
+                {% if event.is_inferred %}
+                <div class="mt-2 p-2 bg-dark rounded border border-purple border-opacity-50 small text-purple" style="color: #c4b5fd;">
+                    <i class="fa-solid fa-circle-info me-1"></i> 
+                    <strong>Investigator Note:</strong> This step represents an analytical inference bridging detected attack steps. It is deduced from subsequent activity rather than a single explicit payload signature.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="soc-card text-center py-5">
+            <i class="fa-solid fa-timeline text-secondary fs-1 mb-3"></i>
+            <h5 class="text-white">No Timeline Events Available</h5>
+            <p class="text-secondary small mb-0">No timeline events recorded for this capture.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

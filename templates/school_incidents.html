@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="page-heading">
+    <p class="eyebrow">CORRELATED EVIDENCE</p>
+    <h1><span class="heading-dot"></span>Security incidents.</h1>
+    <p class="subtle">
+        Related signals grouped by source and time. Confirmation stays with the analyst.
+    </p>
+</div>
+
+{# ── Filters bar ─────────────────────────────────────────────────────────────── #}
+<form method="GET" class="filters" action="{{ url_for('schoolnet.incidents') }}">
+    <input type="hidden" name="analysis_id" value="{{ analysis.id if analysis else '' }}">
+
+    <select name="risk" class="form-select form-select-sm">
+        <option value="">All priorities</option>
+        <option value="High"   {% if request.args.get('risk') == 'High'   %}selected{% endif %}>High</option>
+        <option value="Medium" {% if request.args.get('risk') == 'Medium' %}selected{% endif %}>Medium</option>
+        <option value="Low"    {% if request.args.get('risk') == 'Low'    %}selected{% endif %}>Low</option>
+    </select>
+
+    <select name="status" class="form-select form-select-sm">
+        <option value="">All statuses</option>
+        <option value="open"          {% if request.args.get('status') == 'open'          %}selected{% endif %}>Open</option>
+        <option value="investigating" {% if request.args.get('status') == 'investigating' %}selected{% endif %}>Investigating</option>
+        <option value="resolved"      {% if request.args.get('status') == 'resolved'      %}selected{% endif %}>Resolved</option>
+    </select>
+
+    <button type="submit" class="btn btn-cyber-primary btn-sm">Filter</button>
+
+    <span class="pill cyan ms-auto">
+        {{ incidents | length }} incident{% if incidents | length != 1 %}s{% endif %}
+    </span>
+</form>
+
+{# ── Summary metric bar ───────────────────────────────────────────────────────── #}
+<div class="metric-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 1.5rem;">
+    <div class="metric">
+        <span class="metric-label subtle">Total incidents</span>
+        <span class="metric-value">{{ incidents | length }}</span>
+    </div>
+    <div class="metric">
+        <span class="metric-label subtle">High priority</span>
+        <span class="metric-value" style="color: var(--red);">
+            {{ incidents | selectattr('risk', 'equalto', 'High') | list | length }}
+        </span>
+    </div>
+    <div class="metric">
+        <span class="metric-label subtle">Open / unresolved</span>
+        <span class="metric-value" style="color: var(--amber);">
+            {{ incidents | rejectattr('status', 'equalto', 'resolved') | list | length }}
+        </span>
+    </div>
+</div>
+
+{# ── Incidents table ──────────────────────────────────────────────────────────── #}
+{% if incidents %}
+<div class="panel">
+    <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Incident ID</th>
+                    <th>Priority</th>
+                    <th>Source Device</th>
+                    <th>Destination</th>
+                    <th>Signal Types</th>
+                    <th>First Observed</th>
+                    <th>Last Observed</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for i in incidents %}
+                <tr>
+                    {# Incident ID #}
+                    <td>
+                        <a href="{{ url_for('schoolnet.incident', iid=i.id) }}"
+                           class="mono"
+                           style="color: var(--cyan); text-decoration: none;">
+                            {{ i.id[:8] }}&nbsp;↗
+                        </a>
+                    </td>
+
+                    {# Priority #}
+                    <td>
+                        {% if i.risk == 'High' %}
+                            <span class="pill high">High</span>
+                        {% elif i.risk == 'Medium' %}
+                            <span class="pill medium">Medium</span>
+                        {% else %}
+                            <span class="pill low">Low</span>
+                        {% endif %}
+                    </td>
+
+                    {# Source device #}
+                    <td>
+                        <span class="mono">{{ i.source_ip }}</span>
+                        {% if i.device_role %}
+                            <br>
+                            <small class="subtle">{{ i.device_role }}</small>
+                        {% endif %}
+                    </td>
+
+                    {# Destination #}
+                    <td>
+                        <span class="mono" style="max-width: 160px; display: inline-block;
+                              overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                              title="{{ i.destination_ip }}">
+                            {{ i.destination_ip }}
+                        </span>
+                    </td>
+
+                    {# Signal types — unique 'type' values from evidence #}
+                    <td>
+                        <small class="subtle">
+                            {% set types = i.evidence | map(attribute='type') | unique | list %}
+                            {% if types %}
+                                {{ types | join(', ') }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </small>
+                    </td>
+
+                    {# First observed #}
+                    <td>
+                        <small class="subtle">
+                            {{ i.first_seen | epoch if i.first_seen else '—' }}
+                        </small>
+                    </td>
+
+                    {# Last observed #}
+                    <td>
+                        <small class="subtle">
+                            {{ i.last_seen | epoch if i.last_seen else '—' }}
+                        </small>
+                    </td>
+
+                    {# Status + confirmation #}
+                    <td>
+                        {% if i.status == 'open' %}
+                            <span class="pill high">open</span>
+                        {% elif i.status == 'investigating' %}
+                            <span class="pill amber">investigating</span>
+                        {% else %}
+                            <span class="pill good">resolved</span>
+                        {% endif %}
+                        <br>
+                        <small class="subtle">{{ i.confirmation }}</small>
+                    </td>
+
+                    {# Actions #}
+                    <td>
+                        <a href="{{ url_for('schoolnet.incident', iid=i.id) }}"
+                           class="btn btn-outline-info btn-sm">
+                            Investigate
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% else %}
+{# ── Empty state ──────────────────────────────────────────────────────────────── #}
+<div class="panel">
+    <div class="empty-state">
+        <i class="fa-solid fa-shield-halved" style="font-size: 2.5rem; color: var(--text-secondary); margin-bottom: 1rem;"></i>
+        <p class="subtle">No incidents match the current filters.</p>
+        <a href="{{ url_for('schoolnet.incidents', analysis_id=analysis.id if analysis else '') }}"
+           class="btn btn-outline-info btn-sm mt-2">
+            Clear filters
+        </a>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

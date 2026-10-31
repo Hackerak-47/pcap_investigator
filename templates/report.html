@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}PDF Report - {{ analysis.original_filename }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+            <div>
+                <h3 class="text-white fw-bold mb-0">
+                    <i class="fa-solid fa-file-pdf text-danger me-2"></i> Executive PDF Investigation Report
+                </h3>
+                <p class="text-secondary small mb-0">
+                    Publication-grade incident dossier generated using ReportLab, tailored for SOC handover or academic defense.
+                </p>
+            </div>
+            <a href="{{ url_for('report_download', analysis_id=analysis.id) }}" class="btn btn-cyber-primary btn-lg">
+                <i class="fa-solid fa-download me-2"></i> Download Official PDF
+            </a>
+        </div>
+
+        <div class="soc-card p-4 mb-4">
+            <h5 class="text-white font-monospace mb-3">Report Document Manifest</h5>
+            <div class="table-responsive">
+                <table class="table table-cyber font-monospace small align-middle mb-0">
+                    <tbody>
+                        <tr>
+                            <td class="text-secondary" style="width: 220px;">Report Subject:</td>
+                            <td class="text-white fw-bold">{{ analysis.original_filename }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-secondary">Analysis Unique ID:</td>
+                            <td class="text-info">{{ analysis.id }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-secondary">Total Processed Packets:</td>
+                            <td class="text-light">{{ analysis.packet_count }} packets</td>
+                        </tr>
+                        <tr>
+                            <td class="text-secondary">Capture Time Span:</td>
+                            <td class="text-light">{{ analysis.duration|format_duration }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-secondary">Report Engine:</td>
+                            <td class="text-cyber-green">ReportLab v3+ PDF Automation Engine</td>
+                        </tr>
+                        <tr>
+                            <td class="text-secondary">Investigation Mode:</td>
+                            <td>
+                                {% if investigation and investigation.ai_generated %}
+                                    <span class="badge bg-info text-dark">LLM AI Powered (OpenAI)</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Rule-Based Deterministic Synthesis</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- PDF Section Preview -->
+        <div class="soc-card p-4 mb-4">
+            <h6 class="text-cyber-blue font-monospace mb-3">
+                <i class="fa-solid fa-layer-group me-1"></i> Included Forensic Sections in PDF
+            </h6>
+            <div class="row g-3 small">
+                <div class="col-md-6">
+                    <ul class="list-group list-group-flush bg-transparent">
+                        <li class="list-group-item bg-transparent text-light border-secondary border-opacity-25 px-0">
+                            <strong>Cover:</strong> Title, Analysis ID, Classification &amp; Severity Counts
+                        </li>
+                        <li class="list-group-item bg-transparent text-light border-secondary border-opacity-25 px-0">
+                            <strong>Section 1:</strong> Executive Incident Summary
+                        </li>
+                        <li class="list-group-item bg-transparent text-light border-secondary border-opacity-25 px-0">
+                            <strong>Section 2:</strong> PCAP Overview &amp; Protocol Breakdown
+                        </li>
+                        <li class="list-group-item bg-transparent text-light border-secondary border-opacity-25 px-0">
+                            <strong>Section 3:</strong> Threat Event Matrix &amp; Risk Scoring
+                        </li>
+                        <li class="list-group-item bg-transparent text-light border-secondary border-opacity-25 px-0">
+                            <strong>Section 4:</strong> Attack Timeline (Phased MITRE ATT&amp;CK Mapping)
+                        </li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <ul class="list-group list-group-flush bg-transparent">
+                        <li class="list-group-item bg-transparent text-light border-secondary border-opacity-25 px-0">
+                            <strong>Section 5:</strong> Detailed Findings &amp; Wireshark Display Filters
+                        </li>
+                        <li class="list-group-item bg-transparent text-light border-secondary border-opacity-25 px-0">
+                            <strong>Section 6:</strong> AI Investigation &amp; Threat Hypotheses
+                        </li>
+                        <li class="list-group-item bg-transparent text-light border-secondary border-opacity-25 px-0">
+                            <strong>Section 7:</strong> Observed Evidence vs. Analyst Inference
+                        </li>
+                        <li class="list-group-item bg-transparent text-light border-secondary border-opacity-25 px-0">
+                            <strong>Section 8:</strong> Prioritized Incident Response Recommendations
+                        </li>
+                        <li class="list-group-item bg-transparent text-light border-secondary border-opacity-25 px-0">
+                            <strong>Section 9:</strong> Technical Appendix &amp; Port Distribution
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="mt-4 text-center">
+                <a href="{{ url_for('report_download', analysis_id=analysis.id) }}" class="btn btn-cyber-primary px-5 py-2">
+                    <i class="fa-solid fa-file-arrow-down me-2"></i> Click Here to Download PDF
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

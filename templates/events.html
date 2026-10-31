@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Threat Events - {{ analysis.original_filename }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h3 class="text-white fw-bold mb-0">
+            <i class="fa-solid fa-triangle-exclamation text-danger me-2"></i> Threat Events &amp; Detection Findings
+        </h3>
+        <p class="text-secondary small mb-0">
+            Rule-based detection results with risk scores, confidence factors, and forensic packet mappings.
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('timeline', analysis_id=analysis.id) }}" class="btn btn-cyber-primary btn-sm">
+            <i class="fa-solid fa-timeline me-1"></i> View Attack Timeline
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="soc-card p-3 mb-4">
+    <form method="GET" action="{{ url_for('events', analysis_id=analysis.id) }}" class="row g-2 align-items-end">
+        <div class="col-md-3 col-sm-6">
+            <label class="text-secondary small">Filter by Severity</label>
+            <select name="severity" class="form-select form-select-sm bg-surface text-light border-secondary border-opacity-50 font-monospace">
+                <option value="">All Severities</option>
+                <option value="CRITICAL" {% if filters.severity == 'CRITICAL' %}selected{% endif %}>CRITICAL</option>
+                <option value="HIGH" {% if filters.severity == 'HIGH' %}selected{% endif %}>HIGH</option>
+                <option value="MEDIUM" {% if filters.severity == 'MEDIUM' %}selected{% endif %}>MEDIUM</option>
+                <option value="LOW" {% if filters.severity == 'LOW' %}selected{% endif %}>LOW</option>
+            </select>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <label class="text-secondary small">Threat Type</label>
+            <select name="event_type" class="form-select form-select-sm bg-surface text-light border-secondary border-opacity-50 font-monospace">
+                <option value="">All Threat Types</option>
+                {% for et in event_types %}
+                    <option value="{{ et }}" {% if filters.event_type == et %}selected{% endif %}>{{ et.replace('_', ' ') }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4 col-sm-8">
+            <label class="text-secondary small">Source IP</label>
+            <input type="text" name="src_ip" value="{{ filters.src_ip }}" class="form-control form-control-sm bg-surface text-light border-secondary border-opacity-50 font-monospace" placeholder="e.g. 192.168.1.105">
+        </div>
+        <div class="col-md-2 col-sm-4 d-flex gap-2">
+            <button type="submit" class="btn btn-cyber-primary btn-sm w-100">Filter</button>
+            <a href="{{ url_for('events', analysis_id=analysis.id) }}" class="btn btn-outline-secondary btn-sm"><i class="fa-solid fa-rotate-left"></i></a>
+        </div>
+    </form>
+</div>
+
+<!-- List of Threat Events (Expanded Cards) -->
+<div class="d-flex flex-column gap-3 mb-5">
+    {% if threat_events %}
+        {% for event in threat_events %}
+        <div class="soc-card p-4 border border-secondary border-opacity-25" id="event-{{ event.id }}">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                <div class="d-flex align-items-center gap-3">
+                    <span class="badge {{ event.severity|severity_badge }} fs-6 px-3 py-2">
+                        {{ event.severity }}
+                    </span>
+                    <div>
+                        <h5 class="text-white mb-0 font-monospace">{{ event.event_type.replace('_', ' ') }}</h5>
+                        <span class="text-secondary small">
+                            Detected at: <span class="text-info">{{ event.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC') if event.timestamp else 'N/A' }}</span>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center gap-3 font-monospace">
+                    <div class="text-end">
+                        <span class="text-secondary small d-block">Risk Score</span>
+                        <span class="fs-5 fw-bold {% if event.risk_score >= 80 %}text-danger{% elif event.risk_score >= 60 %}text-warning{% else %}text-info{% endif %}">
+                            {{ event.risk_score|round(0)|int }}/100
+                        </span>
+                    </div>
+                    <div class="text-end">
+                        <span class="text-secondary small d-block">Confidence</span>
+                        <span class="fs-5 fw-bold text-white">
+                            {{ ((event.confidence or 0) * 100)|round(0)|int }}%
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Host Targets -->
+            <div class="row g-2 mb-3 font-monospace small bg-surface p-2 rounded border border-secondary border-opacity-25">
+                <div class="col-md-6">
+                    <span class="text-secondary">Source IP:</span> 
+                    <span class="text-info fw-semibold">{{ event.source_ip or 'N/A' }}</span>
+                </div>
+                <div class="col-md-6">
+                    <span class="text-secondary">Destination Target:</span> 
+                    <span class="text-white fw-semibold">{{ event.destination_ip or 'N/A' }}</span>
+                </div>
+            </div>
+
+            <!-- Description -->
+            <p class="text-light mb-3">
+                {{ event.description }}
+            </p>
+
+            <!-- Wireshark Filter Snippet -->
+            <div class="p-3 bg-dark rounded border border-secondary border-opacity-50 mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="text-secondary small font-monospace">
+                        <i class="fa-solid fa-filter text-info me-1"></i> Wireshark Display Filter Suggestion:
+                    </span>
+                    <button class="btn btn-xs btn-outline-info py-0 px-2" onclick="navigator.clipboard.writeText('{{ event|wireshark_filter }}'); alert('Copied Wireshark Filter!');">
+                        <i class="fa-regular fa-copy me-1"></i> Copy
+                    </button>
+                </div>
+                <code class="text-warning font-monospace">{{ event|wireshark_filter }}</code>
+            </div>
+
+            <!-- Evidence Accordion -->
+            <div class="accordion" id="acc-{{ event.id }}">
+                <div class="accordion-item bg-surface-elevated border-secondary border-opacity-25">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed bg-surface text-light py-2 px-3 small font-monospace" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ event.id }}">
+                            <i class="fa-solid fa-code me-2 text-info"></i> View Raw Evidence &amp; Correlated Packet Numbers
+                        </button>
+                    </h2>
+                    <div id="collapse-{{ event.id }}" class="accordion-collapse collapse" data-bs-parent="#acc-{{ event.id }}">
+                        <div class="accordion-body p-3 font-monospace small">
+                            <div class="mb-2 text-secondary">
+                                Associated Packet IDs: 
+                                <span class="text-info">{{ event.to_dict().packet_numbers[:25] }}...</span>
+                            </div>
+                            <pre class="code-box mb-0">{{ event.to_dict().evidence|tojson(indent=2) }}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="soc-card text-center py-5">
+            <i class="fa-solid fa-shield-halved text-success fs-1 mb-3"></i>
+            <h5 class="text-white">No Threat Events Found</h5>
+            <p class="text-secondary small mb-0">No threat indicators matched the selected criteria.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

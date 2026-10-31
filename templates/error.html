@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Error {{ error_code }} - PCAP Investigator{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-5">
+    <div class="col-md-6 text-center">
+        <div class="p-4 bg-surface rounded border border-danger border-opacity-25 shadow-sm">
+            <i class="fa-solid fa-triangle-exclamation text-danger fa-4x mb-3"></i>
+            <h2 class="text-white fw-bold mb-2">Error {{ error_code }}</h2>
+            <p class="text-secondary mb-4">{{ message }}</p>
+            
+            <div class="d-flex justify-content-center gap-3">
+                <a href="{{ url_for('index') }}" class="btn btn-cyber-primary">
+                    <i class="fa-solid fa-house me-1"></i> Return Home
+                </a>
+                <a href="{{ url_for('upload_page') }}" class="btn btn-outline-secondary">
+                    <i class="fa-solid fa-cloud-arrow-up me-1"></i> Upload PCAP
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

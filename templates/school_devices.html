@@ -1,0 +1,263 @@
+{% extends 'base.html' %}
+{% block title %}Device Monitoring · SchoolNet AI{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+    <div>
+        <div class="eyebrow">SCHOOL NETWORK ASSET REPOSITORY</div>
+        <h1>Device monitoring<span class="heading-dot">.</span></h1>
+        <p>Assign educational roles, monitor device activity, identify unknown endpoints, and define approved communication relationships.</p>
+    </div>
+    <div style="display: flex; gap: 12px; align-items: center;">
+        <input id="device-search" placeholder="Search IP, role, or device..." aria-label="Search devices" style="min-width: 250px;">
+    </div>
+</div>
+
+<!-- Metrics Summary -->
+<div class="metric-grid">
+    <article class="metric">
+        <div class="metric-label">
+            Registered devices
+            <i class="fa-solid fa-server teal"></i>
+        </div>
+        <strong>{{ registered|length }}</strong>
+        <small>Configured inventory</small>
+    </article>
+    <article class="metric">
+        <div class="metric-label">
+            Observed endpoints
+            <i class="fa-solid fa-desktop cyan"></i>
+        </div>
+        <strong>{{ ips|length }}</strong>
+        <small>Active in current capture</small>
+    </article>
+    <article class="metric">
+        <div class="metric-label">
+            Anomalous endpoints
+            <i class="fa-solid fa-wave-square purple"></i>
+        </div>
+        <strong>{{ anomalous|length }}</strong>
+        <small>Flagged by Isolation Forest</small>
+    </article>
+    <article class="metric">
+        <div class="metric-label">
+            Approved policies
+            <i class="fa-solid fa-shield-halved good"></i>
+        </div>
+        <strong>{{ policies|length }}</strong>
+        <small>Role access exceptions</small>
+    </article>
+</div>
+
+<!-- Devices Table -->
+<section class="panel">
+    <div class="panel-heading">
+        <h2>Network endpoint inventory</h2>
+        <span class="subtle">{{ ips|length }} ENDPOINTS</span>
+    </div>
+    
+    <div class="table-responsive">
+        <table id="device-table">
+            <thead>
+                <tr>
+                    <th>Device Name & IP</th>
+                    <th>Assigned Role</th>
+                    <th>Observed Protocols</th>
+                    <th>Traffic Volume</th>
+                    <th>ML Anomaly Status</th>
+                    <th>Incident Priority</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ip in ips %}
+                {% set d = registered.get(ip) %}
+                {% set act = activity.get(ip) %}
+                <tr>
+                    <td>
+                        <strong>{{ d.name if d else 'Unregistered device' }}</strong>
+                        <small class="mono">{{ ip }}</small>
+                    </td>
+                    <td>
+                        {% if d %}
+                            {% if d.role == 'School Server' %}
+                            <span class="pill amber"><i class="fa-solid fa-server"></i> {{ d.role }}</span>
+                            {% elif d.role == 'Admin PC' %}
+                            <span class="pill purple"><i class="fa-solid fa-user-shield"></i> {{ d.role }}</span>
+                            {% elif d.role == 'Teacher PC' %}
+                            <span class="pill cyan"><i class="fa-solid fa-chalkboard-user"></i> {{ d.role }}</span>
+                            {% else %}
+                            <span class="pill good"><i class="fa-solid fa-graduation-cap"></i> {{ d.role }}</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="pill" style="opacity: 0.7;">Unknown</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ act.protocols|sort|join(', ') if act and act.protocols else '—' }}
+                    </td>
+                    <td class="mono">
+                        {{ act.bytes|format_bytes if act else '—' }}
+                    </td>
+                    <td>
+                        {% if ip in anomalous %}
+                        <span class="pill purple"><i class="fa-solid fa-bolt"></i> Unusual</span>
+                        {% else %}
+                        <span class="subtle" style="font-size: 11px;">Within baseline</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if risks.get(ip) %}
+                        <span class="pill {{ risks[ip]|lower }}">{{ risks[ip] }}</span>
+                        {% else %}
+                        <span class="subtle">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if d %}
+                        <div style="display: flex; gap: 6px;">
+                            <button class="btn btn-sm btn-outline-info" data-device='{{ {"id": d.id, "name": d.name, "ip": d.ip, "role": d.role, "notes": d.notes}|tojson }}'>
+                                <i class="fa-solid fa-pen-to-square"></i> Edit
+                            </button>
+                            <form method="post" action="{{ url_for('schoolnet.devices') }}" style="display: inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="id" value="{{ d.id }}">
+                                <input type="hidden" name="analysis_id" value="{{ analysis.id if analysis else '' }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove {{ d.name }} from registry?');">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                        {% else %}
+                        <button class="text-button" onclick="document.querySelector('#device-form input[name=ip]').value='{{ ip }}'; document.getElementById('device-form').scrollIntoView({behavior:'smooth'});">
+                            <i class="fa-solid fa-plus"></i> Register
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="empty-small">
+                        No devices discovered. Upload a network capture or register devices manually below.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Device Registration & Communication Policies -->
+<div class="split-grid">
+    <!-- Register Device Form -->
+    <section class="panel">
+        <div class="panel-heading">
+            <h2 id="device-form-title">Register device</h2>
+            <span class="subtle">INVENTORY</span>
+        </div>
+        <p>Assign educational role context to IP addresses to assist threat investigation.</p>
+
+        <form method="post" action="{{ url_for('schoolnet.devices') }}" id="device-form" class="form-grid">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="id" value="">
+            <input type="hidden" name="analysis_id" value="{{ analysis.id if analysis else '' }}">
+
+            <label>
+                Device Name
+                <input name="name" required maxlength="100" placeholder="e.g. Science Lab PC-04">
+            </label>
+
+            <label>
+                IP Address
+                <input name="ip" required placeholder="e.g. 192.168.1.105">
+            </label>
+
+            <label>
+                Device Role
+                <select name="role">
+                    {% for r in roles %}
+                    <option value="{{ r }}">{{ r }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label>
+                Location & Notes
+                <input name="notes" maxlength="500" placeholder="Building B, Room 204">
+            </label>
+
+            <div style="grid-column: 1 / -1; margin-top: 10px; display: flex; gap: 10px;">
+                <button type="submit" class="btn btn-cyber-primary">
+                    <i class="fa-solid fa-floppy-disk"></i> Save device
+                </button>
+                <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('device-form').reset(); document.querySelector('#device-form input[name=id]').value=''; document.getElementById('device-form-title').textContent='Register device';">
+                    Reset
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <!-- Communication Policies -->
+    <section class="panel">
+        <div class="panel-heading">
+            <h2>Approved communication policies</h2>
+            <span class="subtle">EXCEPTIONS</span>
+        </div>
+        <p>Legitimate administrative access rules. Traffic adhering to these policies will not trigger role-violation alerts.</p>
+
+        <form method="post" action="{{ url_for('schoolnet.policies') }}" class="form-grid" style="margin-bottom: 20px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="analysis_id" value="{{ analysis.id if analysis else '' }}">
+
+            <label>
+                Source Role
+                <select name="source_role">
+                    {% for r in roles %}
+                    <option value="{{ r }}">{{ r }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label>
+                Destination IP
+                <input name="destination_ip" required placeholder="192.168.1.10">
+            </label>
+
+            <label style="grid-column: 1 / -1;">
+                Destination Port (Optional)
+                <input name="destination_port" type="number" min="1" max="65535" placeholder="Leave blank for all ports">
+            </label>
+
+            <button type="submit" class="btn btn-cyber-primary" style="grid-column: 1 / -1;">
+                <i class="fa-solid fa-plus"></i> Add approved relationship
+            </button>
+        </form>
+
+        <div style="border-top: 1px solid var(--line); padding-top: 12px;">
+            <h3 style="font-size: 13px; margin-bottom: 10px;">Configured Policies:</h3>
+            {% for p in policies %}
+            <div class="engine-row">
+                <span>
+                    <strong class="cyan">{{ p.source_role }}</strong> → <span class="mono">{{ p.destination_ip }}:{{ p.destination_port or '*' }}</span>
+                </span>
+                <form method="post" action="{{ url_for('schoolnet.policies') }}" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="id" value="{{ p.id }}">
+                    <input type="hidden" name="analysis_id" value="{{ analysis.id if analysis else '' }}">
+                    <button type="submit" class="text-button" style="color: var(--red);">
+                        <i class="fa-solid fa-xmark"></i> Remove
+                    </button>
+                </form>
+            </div>
+            {% else %}
+            <div class="empty-small" style="padding: 10px;">
+                No policies defined. Cross-role communication (e.g. Student PC → School Server) will be flagged for review.
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+</div>
+
+{% endblock %}

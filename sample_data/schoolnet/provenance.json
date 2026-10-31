@@ -1,0 +1,21 @@
+{
+  "synthetic": true,
+  "purpose": "Academic testing only; not real school incidents",
+  "seeds": [
+    42,
+    84,
+    126
+  ],
+  "training": "normal_train.pcap",
+  "held_out": [
+    "normal_test.pcap",
+    "mixed_test.pcap"
+  ],
+  "anomaly_ground_truth_sources": [
+    "10.20.0.99",
+    "10.20.0.98",
+    "10.20.0.97",
+    "10.20.0.96",
+    "10.20.0.95"
+  ]
+}

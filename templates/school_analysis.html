@@ -1,0 +1,339 @@
+{% extends 'base.html' %}
+{% block content %}
+
+{# ── Page heading ─────────────────────────────────────────────────────────── #}
+<div class="page-heading">
+    <div>
+        <p class="eyebrow">
+            <span class="heading-dot"></span>
+            CAPTURE → INTELLIGENCE
+        </p>
+        <h1>PCAP analysis.</h1>
+        <p class="subtle" style="margin-top: 0.25rem; max-width: 520px;">
+            Upload a raw network capture and let SchoolNet AI extract flows,
+            evaluate behavioural signals, and correlate security incidents
+            automatically.
+        </p>
+    </div>
+    <span class="pill cyan" style="align-self: flex-start; margin-top: 0.25rem;">
+        PCAP&nbsp;/&nbsp;PCAPNG
+    </span>
+</div>
+
+{# ── Upload grid (2 columns) ──────────────────────────────────────────────── #}
+<div
+    class="upload-grid"
+    style="display: grid; grid-template-columns: 1.8fr 1fr; gap: 1.25rem; align-items: start;"
+>
+
+    {# ── Left: upload panel ────────────────────────────────────────────────── #}
+    <div class="panel">
+        <div class="panel-head">
+            <span>Upload capture file</span>
+        </div>
+
+        <form
+            id="capture-upload"
+            action="{{ url_for('upload_file') }}"
+            method="post"
+            enctype="multipart/form-data"
+        >
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            {# Drop zone #}
+            <div class="upload-zone" id="upload-zone">
+
+                <div class="upload-symbol">
+                    <i class="fa-solid fa-arrow-up-from-bracket"></i>
+                </div>
+
+                <h2>Drop your network capture here</h2>
+
+                <p class="subtle">
+                    PCAP or PCAPNG &middot; up to {{ max_mb }} MB
+                </p>
+
+                <label for="capture-file" class="btn btn-cyber-primary mt-1">
+                    <i class="fa-solid fa-folder-open me-2"></i>Browse files
+                </label>
+
+                <input
+                    type="file"
+                    id="capture-file"
+                    name="pcap_file"
+                    accept=".pcap,.pcapng"
+                    required
+                    class="visually-hidden"
+                >
+
+                <div id="file-description" class="file-description mt-2"></div>
+
+            </div>{# /upload-zone #}
+
+            {# Options row beneath the zone #}
+            <div class="upload-options mt-3">
+
+                <label class="d-flex align-items-center gap-2" style="cursor: pointer;">
+                    <input type="checkbox" name="run_ml" value="1" checked
+                        style="accent-color: var(--cyan); width: 1rem; height: 1rem;">
+                    <span class="small">Run ML anomaly detection after extraction</span>
+                </label>
+
+                <button
+                    type="submit"
+                    id="analyze-button"
+                    class="btn btn-cyber-primary"
+                >
+                    <i class="fa-solid fa-magnifying-glass-chart me-2"></i>
+                    Analyse capture
+                </button>
+
+            </div>
+
+            {# Status / progress #}
+            <div id="upload-status" class="upload-status mt-3" style="display: none;">
+                <p class="small subtle mb-1" id="upload-status-text">Uploading…</p>
+                <div
+                    class="progress"
+                    style="height: 4px; background: var(--line); border-radius: 2px;"
+                >
+                    <div
+                        id="upload-progress-bar"
+                        class="progress-bar"
+                        style="width: 0%; background: var(--cyan); border-radius: 2px; transition: width 0.3s;"
+                    ></div>
+                </div>
+            </div>
+
+        </form>
+    </div>{# /left panel #}
+
+    {# ── Right: pipeline sidebar ───────────────────────────────────────────── #}
+    <div>
+
+        <div class="panel mb-3">
+            <div class="panel-head">
+                <span>Analysis pipeline</span>
+            </div>
+
+            <div class="pipeline-step">
+                <span class="pipeline-number">01</span>
+                <div>
+                    <strong>Extract evidence</strong>
+                    <p class="subtle small mb-0">
+                        Parse raw PCAP frames, decode protocol layers, and
+                        fingerprint every observable.
+                    </p>
+                </div>
+            </div>
+
+            <div class="pipeline-step">
+                <span class="pipeline-number">02</span>
+                <div>
+                    <strong>Build network flows</strong>
+                    <p class="subtle small mb-0">
+                        Reconstruct bidirectional conversations and compute
+                        per-flow statistics.
+                    </p>
+                </div>
+            </div>
+
+            <div class="pipeline-step">
+                <span class="pipeline-number">03</span>
+                <div>
+                    <strong>Evaluate signals</strong>
+                    <p class="subtle small mb-0">
+                        Apply rule-based detections and ML anomaly scoring
+                        against each flow.
+                    </p>
+                </div>
+            </div>
+
+            <div class="pipeline-step">
+                <span class="pipeline-number">04</span>
+                <div>
+                    <strong>Correlate incidents</strong>
+                    <p class="subtle small mb-0">
+                        Group related alerts into actionable incidents with
+                        risk and device context.
+                    </p>
+                </div>
+            </div>
+
+        </div>{# /pipeline panel #}
+
+        <div class="notice">
+            <i class="fa-solid fa-circle-info me-2" style="color: var(--purple);"></i>
+            <span class="small">
+                ML anomaly detection requires a trained baseline model.
+                It runs as a separate background stage and may take a moment
+                to complete after the initial extraction.
+            </span>
+        </div>
+
+    </div>{# /right sidebar #}
+
+</div>{# /upload-grid #}
+
+
+{# ── Results section (only when an analysis is loaded) ───────────────────── #}
+{% if analysis %}
+
+<div class="investigation-section" style="margin-top: 2rem;">
+
+    {# Section heading #}
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <h2 class="h5 mb-0" style="color: var(--text-primary);">
+            <i class="fa-solid fa-table me-2" style="color: var(--cyan);"></i>
+            Extracted flows
+        </h2>
+        <a
+            href="{{ url_for('packets', analysis_id=analysis.id) }}"
+            class="btn btn-sm btn-outline-info"
+        >
+            <i class="fa-solid fa-layer-group me-1"></i>Raw packets
+        </a>
+    </div>
+
+    {# Polling target for live status updates #}
+    <div
+        class="analysis-status"
+        id="analysis-status"
+        data-id="{{ analysis.id }}"
+        data-status="{{ analysis.status }}"
+        style="display: none;"
+    ></div>
+
+    {# Summary metric strip #}
+    <div
+        class="capture-strip mb-3"
+        style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem;"
+    >
+
+        <article class="metric">
+            <div class="metric-label">
+                <i class="fa-solid fa-layer-group" style="color: var(--cyan);"></i>
+                Packets
+            </div>
+            <strong>{{ analysis.packet_count | default(0) }}</strong>
+            <small>Captured frames</small>
+        </article>
+
+        <article class="metric">
+            <div class="metric-label">
+                <i class="fa-solid fa-water" style="color: var(--teal);"></i>
+                Flows
+            </div>
+            <strong>{{ flows | length }}</strong>
+            <small>Reconstructed sessions</small>
+        </article>
+
+        <article class="metric">
+            <div class="metric-label">
+                <i class="fa-solid fa-circle-half-stroke" style="color: var(--purple);"></i>
+                Status
+            </div>
+            <strong
+                class="small"
+                style="color: {% if analysis.status == 'complete' %}var(--green){% elif analysis.status == 'error' %}var(--red){% else %}var(--amber){% endif %};"
+            >
+                {{ analysis.status | title }}
+            </strong>
+            <small>Pipeline stage</small>
+        </article>
+
+    </div>{# /capture-strip #}
+
+    {# Flows table #}
+    {% if flows %}
+    <div class="table-responsive panel" style="padding: 0;">
+        <table class="table table-dark table-hover mb-0" style="font-size: 0.82rem;">
+            <thead style="border-bottom: 1px solid var(--line);">
+                <tr>
+                    <th>Source</th>
+                    <th>Destination</th>
+                    <th>Transport</th>
+                    <th>Role</th>
+                    <th class="text-end">Duration</th>
+                    <th class="text-end">Packets</th>
+                    <th class="text-end">Bytes sent</th>
+                    <th class="text-end">Bytes recv</th>
+                    <th class="text-end">Failed</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in flows %}
+                <tr>
+                    <td>
+                        <span class="mono">{{ f.src_ip }}</span>
+                        <span class="subtle small">:{{ f.src_port }}</span>
+                    </td>
+                    <td>
+                        <span class="mono">{{ f.dst_ip }}</span>
+                        <span class="subtle small">:{{ f.dst_port }}</span>
+                    </td>
+                    <td>
+                        <span class="pill cyan">{{ f.protocol }}</span>
+                    </td>
+                    <td>
+                        {% if f.source_role or f.destination_role %}
+                        <span class="subtle small">
+                            {{ f.source_role or '—' }}
+                            {% if f.destination_role %}
+                            → {{ f.destination_role }}
+                            {% endif %}
+                        </span>
+                        {% else %}
+                        <span class="subtle">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end mono small">
+                        {{ f.features.duration | round(2) if f.features and f.features.duration is defined else '—' }}s
+                    </td>
+                    <td class="text-end mono small">
+                        {{ f.features.packet_count if f.features and f.features.packet_count is defined else '—' }}
+                    </td>
+                    <td class="text-end mono small">
+                        {{ f.features.bytes_sent | format_bytes if f.features and f.features.bytes_sent is defined else '—' }}
+                    </td>
+                    <td class="text-end mono small">
+                        {{ f.features.bytes_received | format_bytes if f.features and f.features.bytes_received is defined else '—' }}
+                    </td>
+                    <td class="text-end">
+                        {% set fc = f.features.failed_connections if f.features and f.features.failed_connections is defined else 0 %}
+                        {% if fc and fc > 0 %}
+                        <span class="pill high">{{ fc }}</span>
+                        {% else %}
+                        <span class="subtle small">0</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if flows | length >= 200 %}
+    <p class="subtle small mt-2 text-center">
+        <i class="fa-solid fa-circle-info me-1"></i>
+        Showing the first 200 flows. Use filters or the packet inspector for deeper analysis.
+    </p>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-small">
+        <i class="fa-solid fa-hourglass-half" style="color: var(--amber);"></i>
+        <p>
+            {% if analysis.status == 'processing' %}
+            Flow extraction is still running — this page will update automatically.
+            {% else %}
+            No flows were extracted from this capture.
+            {% endif %}
+        </p>
+    </div>
+    {% endif %}
+
+</div>{# /investigation-section #}
+{% endif %}{# end if analysis #}
+
+{% endblock %}

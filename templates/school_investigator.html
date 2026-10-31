@@ -1,0 +1,193 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+{# ─── Page heading ─────────────────────────────────────────────────────────── #}
+<div class="page-heading">
+  <div>
+    <div class="eyebrow purple">EVIDENCE-BASED REASONING</div>
+    <h1>AI Investigator<span class="heading-dot">.</span></h1>
+    <p>
+      Choose an incident to inspect facts, possible explanations and
+      recommended next steps.
+    </p>
+  </div>
+  <span class="pill purple">ANALYST VALIDATION REQUIRED</span>
+</div>
+
+{# ─── AI capability notice ─────────────────────────────────────────────────── #}
+<div class="notice" style="margin-bottom: 1.5rem;">
+  <div style="margin-bottom: 0.5rem;">
+    <strong>What AI investigation does</strong>
+  </div>
+  <p style="margin: 0 0 0.5rem;">
+    AI investigation generates structured analysis from stored evidence:
+    incident summary, observed behaviour, supporting evidence, possible
+    explanations, potential impact, confidence level and recommended steps.
+  </p>
+  <p style="margin: 0 0 0.5rem;">
+    The AI must not invent packet data, IP addresses or timestamps.
+    Evidence is bounded to this capture. Anomaly scores reflect deviation,
+    not attack probability.
+  </p>
+  <p style="margin: 0;">
+    AI investigation uses stored evidence. Without an API key, an evidence
+    summary is generated automatically.
+  </p>
+</div>
+
+{# ─── Summary panel (only when an analysis is selected) ───────────────────── #}
+{% if analysis and incidents %}
+<section class="panel" style="margin-bottom: 1.5rem;">
+
+  <h2 style="margin-bottom: 1rem;">Incident summary</h2>
+
+  <div class="metric-grid">
+
+    <div class="metric">
+      <span class="metric-label">Total incidents</span>
+      <strong class="metric-value">{{ incidents | length }}</strong>
+    </div>
+
+    <div class="metric">
+      <span class="metric-label">High risk</span>
+      <strong class="metric-value" style="color: var(--red);">
+        {{ incidents | selectattr('risk', 'equalto', 'High') | list | length }}
+      </strong>
+    </div>
+
+    <div class="metric">
+      <span class="metric-label">Medium risk</span>
+      <strong class="metric-value" style="color: var(--amber);">
+        {{ incidents | selectattr('risk', 'equalto', 'Medium') | list | length }}
+      </strong>
+    </div>
+
+    <div class="metric">
+      <span class="metric-label">Low risk</span>
+      <strong class="metric-value" style="color: var(--green);">
+        {{ incidents | selectattr('risk', 'equalto', 'Low') | list | length }}
+      </strong>
+    </div>
+
+    <div class="metric">
+      <span class="metric-label">AI investigated</span>
+      <strong class="metric-value" style="color: var(--cyan);">
+        {{ incidents | selectattr('ai_result') | list | length }}
+      </strong>
+    </div>
+
+    <div class="metric">
+      <span class="metric-label">Confirmed</span>
+      <strong class="metric-value">
+        {{ incidents | selectattr('confirmation', 'equalto', 'confirmed') | list | length }}
+      </strong>
+    </div>
+
+    <div class="metric">
+      <span class="metric-label">Benign</span>
+      <strong class="metric-value" style="color: var(--green);">
+        {{ incidents | selectattr('confirmation', 'equalto', 'benign') | list | length }}
+      </strong>
+    </div>
+
+    <div class="metric">
+      <span class="metric-label">Unconfirmed</span>
+      <strong class="metric-value" style="color: var(--text-secondary);">
+        {{ incidents | selectattr('confirmation', 'equalto', 'unconfirmed') | list | length }}
+      </strong>
+    </div>
+
+  </div>
+
+</section>
+{% endif %}
+
+{# ─── Incident cards grid ──────────────────────────────────────────────────── #}
+{% if incidents %}
+
+  <div class="investigator-grid">
+
+    {% for incident in incidents %}
+
+      <a
+        class="panel incident-card"
+        href="{{ url_for('schoolnet.incident', iid=incident.id) }}"
+        style="text-decoration: none; display: block;"
+      >
+
+        {# Risk pill + AI status #}
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+          <span class="pill {{ incident.risk | lower }}">{{ incident.risk }}</span>
+          {% if incident.ai_result %}
+            <span class="pill good" style="font-size: 0.7rem;">✓ Investigated</span>
+          {% else %}
+            <span class="pill" style="font-size: 0.7rem; opacity: 0.65;">Pending investigation</span>
+          {% endif %}
+        </div>
+
+        {# Source IP — main heading #}
+        <h2 style="margin: 0 0 0.25rem; font-size: 1.1rem; color: var(--text-primary);">
+          {{ incident.source_ip }}
+        </h2>
+
+        {# Destination IP #}
+        <p style="margin: 0 0 0.75rem; color: var(--text-secondary); font-size: 0.85rem;">
+          {{ incident.destination_ip }}
+        </p>
+
+        {# Engine rows — metadata #}
+        <div class="engine-row">
+          <span>Evidence signals</span>
+          <strong>{{ incident.evidence | length }}</strong>
+        </div>
+
+        <div class="engine-row">
+          <span>Role</span>
+          <strong>{{ incident.device_role }}</strong>
+        </div>
+
+        <div class="engine-row">
+          <span>Status</span>
+          <strong>{{ incident.status }} · {{ incident.confirmation }}</strong>
+        </div>
+
+        <div class="engine-row">
+          <span>First seen</span>
+          <strong>{{ incident.first_seen | epoch }}</strong>
+        </div>
+
+        {# Call-to-action link text #}
+        <div style="margin-top: 1rem; color: var(--purple); font-size: 0.85rem; font-weight: 600;">
+          Open investigation ↗
+        </div>
+
+      </a>
+
+    {% endfor %}
+
+  </div>
+
+{% else %}
+
+  {# ─── Empty state ────────────────────────────────────────────────────────── #}
+  <div class="empty-state">
+    <i class="fa fa-magnifying-glass" aria-hidden="true"></i>
+    <h2>No incidents to investigate</h2>
+    <p>
+      Analyse a capture first. Incidents are generated automatically when
+      unusual behaviour is detected. Unreviewed incidents remain unconfirmed
+      until an analyst acts.
+    </p>
+    <a
+      href="{{ url_for('schoolnet.analysis') }}"
+      class="btn btn-outline-info btn-sm"
+      style="margin-top: 0.75rem;"
+    >
+      Go to analysis
+    </a>
+  </div>
+
+{% endif %}
+
+{% endblock %}

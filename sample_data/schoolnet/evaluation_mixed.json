@@ -1,0 +1,14 @@
+{
+  "synthetic_only": true,
+  "analysis_id": "a8f80087-ba5b-40b4-b16a-3ffc6709db33",
+  "model_id": "0bc34c71-c96a-40b5-afd6-87f0697e1d41",
+  "flows": 179,
+  "true_negative": 112,
+  "false_positive": 8,
+  "false_negative": 0,
+  "true_positive": 59,
+  "precision": 0.8805970149253731,
+  "recall": 1.0,
+  "f1": 0.9365079365079365,
+  "limitation": "Scenario labels are synthetic. These metrics do not estimate real-school accuracy or guarantee zero-day detection."
+}

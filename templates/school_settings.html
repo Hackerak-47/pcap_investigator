@@ -1,0 +1,181 @@
+{% extends 'base.html' %}
+{% block title %}Settings & Configuration · SchoolNet AI{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+    <div>
+        <div class="eyebrow">SYSTEM ARCHITECTURE & CAPABILITIES</div>
+        <h1>Settings & configuration<span class="heading-dot">.</span></h1>
+        <p>Review backend runtime parameters, cryptographic readiness, and AI model connectivity.</p>
+    </div>
+</div>
+
+<!-- Status Grid -->
+<div class="metric-grid">
+    <article class="metric">
+        <div class="metric-label">
+            AI Provider
+            <i class="fa-solid fa-brain purple"></i>
+        </div>
+        <strong>{{ 'Online' if settings.api_ready else 'Offline' }}</strong>
+        <small>{{ settings.provider|upper }} · {{ settings.model }}</small>
+    </article>
+
+    <article class="metric">
+        <div class="metric-label">
+            AES Encryption
+            <i class="fa-solid fa-lock {{ 'good' if settings.encryption_ready else 'amber' }}"></i>
+        </div>
+        <strong class="{{ 'good' if settings.encryption_ready else 'amber' }}">
+            {{ 'Ready' if settings.encryption_ready else 'Unconfigured' }}
+        </strong>
+        <small>AES-256-GCM report protection</small>
+    </article>
+
+    <article class="metric">
+        <div class="metric-label">
+            Digital Signature
+            <i class="fa-solid fa-signature {{ 'good' if settings.signing_ready else 'amber' }}"></i>
+        </div>
+        <strong class="{{ 'good' if settings.signing_ready else 'amber' }}">
+            {{ 'Active' if settings.signing_ready else 'Unconfigured' }}
+        </strong>
+        <small>RSA-PSS SHA-256 signing</small>
+    </article>
+
+    <article class="metric">
+        <div class="metric-label">
+            Access Control
+            <i class="fa-solid fa-shield-halved cyan"></i>
+        </div>
+        <strong>{{ 'Protected' if auth_configured else 'Local' }}</strong>
+        <small>{{ 'Admin password set' if auth_configured else 'Loopback sandbox mode' }}</small>
+    </article>
+</div>
+
+<!-- Detailed Settings Panels (2x2) -->
+<div class="dashboard-grid">
+    <!-- Flow Analysis Engine -->
+    <section class="panel">
+        <div class="panel-heading">
+            <h2>Flow Analysis Engine</h2>
+            <span class="pill cyan">CONFIG</span>
+        </div>
+        <div class="engine-row">
+            <span>Aggregation Window</span>
+            <strong>{{ settings.window }} seconds</strong>
+        </div>
+        <div class="engine-row">
+            <span>Flow Idle Timeout</span>
+            <strong>{{ settings.idle }} seconds</strong>
+        </div>
+        <div class="engine-row">
+            <span>School Internal Subnets</span>
+            <strong class="mono" style="font-size: 11px;">{{ settings.networks }}</strong>
+        </div>
+        <p class="subtle" style="font-size: 11px; margin-top: 15px;">
+            Set <code>FLOW_WINDOW</code>, <code>FLOW_IDLE_TIMEOUT</code>, and <code>SCHOOL_NETWORKS</code> in your <code>.env</code> file.
+        </p>
+    </section>
+
+    <!-- AI Intelligence Engine -->
+    <section class="panel intelligence-panel">
+        <div class="panel-heading">
+            <h2>AI Threat Investigator</h2>
+            <span class="pill purple">INTELLIGENCE</span>
+        </div>
+        <div class="engine-row">
+            <span>API Provider</span>
+            <strong>{{ settings.provider }}</strong>
+        </div>
+        <div class="engine-row">
+            <span>Model Name</span>
+            <strong class="mono">{{ settings.model }}</strong>
+        </div>
+        <div class="engine-row">
+            <span>API Key Status</span>
+            <strong class="{{ 'good' if settings.api_ready else 'amber' }}">
+                {{ 'Configured & Authenticated' if settings.api_ready else 'Not Set (Using Offline Engine)' }}
+            </strong>
+        </div>
+        <p class="subtle" style="font-size: 11px; margin-top: 15px;">
+            Configure <code>GEMINI_API_KEY</code> and <code>GEMINI_MODEL</code> in <code>.env</code>. Only structured metadata is sent; raw packet payloads are never transmitted.
+        </p>
+    </section>
+
+    <!-- Cryptographic Protection -->
+    <section class="panel">
+        <div class="panel-heading">
+            <h2>Cryptographic Infrastructure</h2>
+            <span class="pill good">SECURITY</span>
+        </div>
+        <div class="engine-row">
+            <span>AES-256 Secret Key</span>
+            <strong>{{ 'Configured in backend' if settings.encryption_ready else 'Pending configuration' }}</strong>
+        </div>
+        <div class="engine-row">
+            <span>RSA-PSS Private Key</span>
+            <strong>{{ 'Loaded securely' if settings.signing_ready else 'Key path not found' }}</strong>
+        </div>
+        <div class="engine-row">
+            <span>Signature Scheme</span>
+            <strong>RSA-PSS / SHA-256 (2048-bit)</strong>
+        </div>
+        <p class="subtle" style="font-size: 11px; margin-top: 15px;">
+            Keys are loaded from environment variables and securely kept in memory. They are never exported or serialized into client responses.
+        </p>
+    </section>
+
+    <!-- Authentication & Security -->
+    <section class="panel">
+        <div class="panel-heading">
+            <h2>Platform Access Control</h2>
+            <span class="pill cyan">AUTH</span>
+        </div>
+        <p style="font-size: 13px; line-height: 1.6;">
+            {% if auth_configured %}
+            Session-based password authentication is enabled with Werkzeug PBKDF2-SHA256 password hashing.
+            {% else %}
+            Currently running in <strong>Local Workspace Mode</strong>. Remote network connections are blocked by loopback binding.
+            {% endif %}
+        </p>
+        <p style="font-size: 12px; color: var(--text-secondary);">
+            State-changing requests enforce CSRF tokens. All upload files undergo magic-byte signature validation before ingestion.
+        </p>
+        {% if auth_configured %}
+        <form method="post" action="{{ url_for('schoolnet.logout') }}" style="margin-top: 15px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn btn-outline-danger btn-sm">
+                <i class="fa-solid fa-arrow-right-from-bracket"></i> Sign out
+            </button>
+        </form>
+        {% endif %}
+    </section>
+</div>
+
+<!-- Key Generation Helper Reference -->
+<section class="panel" style="margin-top: 20px;">
+    <div class="panel-heading">
+        <h2>Cryptographic Setup Reference</h2>
+        <span class="subtle">DEVELOPER UTILITY</span>
+    </div>
+    <p>To enable AES-256-GCM encryption and RSA digital signatures, generate keys and add them to your <code>.env</code> file:</p>
+
+    <div style="margin-bottom: 15px;">
+        <span class="subtle" style="font-size: 11px;">1. GENERATE 32-BYTE AES KEY:</span>
+        <pre class="code-box">python -c "import os,base64; print(base64.b64encode(os.urandom(32)).decode())"</pre>
+    </div>
+
+    <div style="margin-bottom: 15px;">
+        <span class="subtle" style="font-size: 11px;">2. GENERATE RSA-2048 KEYPAIR FOR SIGNING:</span>
+        <pre class="code-box">openssl genrsa -out signing_key.pem 2048
+openssl rsa -in signing_key.pem -pubout -out signing_key_pub.pem</pre>
+    </div>
+
+    <div>
+        <span class="subtle" style="font-size: 11px;">3. GENERATE ADMIN PASSWORD HASH:</span>
+        <pre class="code-box">python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('your-secure-password'))"</pre>
+    </div>
+</section>
+
+{% endblock %}

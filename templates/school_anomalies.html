@@ -1,0 +1,308 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+{# ─── Page heading ─────────────────────────────────────────────────────────── #}
+<div class="page-heading">
+  <div>
+    <div class="eyebrow purple">ISOLATION FOREST</div>
+    <h1>Anomaly detection<span class="heading-dot">.</span></h1>
+    <p>
+      Unusual behaviour relative to a separately trained baseline.
+      An anomaly score reflects statistical isolation, not an attack verdict.
+    </p>
+  </div>
+  <span class="pill purple">
+    {{ context.ml_status if context else 'Not evaluated' }}
+  </span>
+</div>
+
+{# ─── Top-level stats row ──────────────────────────────────────────────────── #}
+<div class="metric-grid">
+
+  <div class="metric">
+    <span class="metric-label">Total flows analysed</span>
+    <strong class="metric-value">{{ rows | length }}</strong>
+  </div>
+
+  <div class="metric">
+    <span class="metric-label">Unusual flows</span>
+    <strong class="metric-value" style="color: var(--purple);">
+      {{ rows | selectattr('0.unusual') | list | length }}
+    </strong>
+  </div>
+
+  <div class="metric">
+    <span class="metric-label">Normal flows</span>
+    <strong class="metric-value" style="color: var(--teal);">
+      {{ rows | rejectattr('0.unusual') | list | length }}
+    </strong>
+  </div>
+
+</div>
+
+{# ─── Split grid: chart + model info ──────────────────────────────────────── #}
+<div class="split-grid">
+
+  {# Left panel — anomaly score chart #}
+  <section class="panel">
+    <h2>Flow anomaly scores</h2>
+    <div class="chart-wrap">
+      <canvas id="anomaly-chart"></canvas>
+    </div>
+    <p class="subtle">
+      Higher scores indicate greater isolation from the training distribution.
+      The model decision threshold determines the "Unusual" label — it does not
+      imply malicious intent.
+    </p>
+  </section>
+
+  {# Right panel — baseline model metadata + evaluate button #}
+  <section class="panel">
+    <h2>Baseline model</h2>
+
+    {% if model %}
+
+      <div class="engine-row">
+        <span>Model version</span>
+        <strong class="mono">{{ model.id[:8] }}</strong>
+      </div>
+
+      <div class="engine-row">
+        <span>Training flows</span>
+        <strong>{{ model.metadata_json.training_flows }}</strong>
+      </div>
+
+      <div class="engine-row">
+        <span>Contamination</span>
+        <strong>{{ model.metadata_json.contamination }}</strong>
+      </div>
+
+      <div class="engine-row">
+        <span>Estimators</span>
+        <strong>{{ model.metadata_json.estimators }}</strong>
+      </div>
+
+      <div class="engine-row">
+        <span>Created</span>
+        <strong>{{ model.created_at }}</strong>
+      </div>
+
+      <div class="engine-row">
+        <span>Provenance</span>
+        <strong>
+          {% if model.metadata_json.synthetic %}
+            Synthetic demonstration
+          {% else %}
+            Administrator-selected
+          {% endif %}
+        </strong>
+      </div>
+
+    {% else %}
+
+      <p class="subtle" style="margin-top: 0.75rem;">
+        No trained model. Rules still run normally.
+      </p>
+
+    {% endif %}
+
+    {% if analysis %}
+      <form method="post" action="{{ url_for('schoolnet.enrich') }}" style="margin-top: 1.25rem;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="analysis_id" value="{{ analysis.id }}">
+        <button type="submit" class="btn btn-ai">
+          Evaluate selected capture
+        </button>
+      </form>
+    {% endif %}
+
+  </section>
+
+</div>
+
+{# ─── Behavioural observations table ──────────────────────────────────────── #}
+<section class="panel">
+
+  <div class="panel-heading">
+    <h2>Behavioral observations</h2>
+    <span class="subtle">BASELINE COMPARISONS — NOT CAUSAL ATTRIBUTIONS</span>
+  </div>
+
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>Flow reference</th>
+          <th>Time</th>
+          <th>Source → Destination</th>
+          <th>Role</th>
+          <th>Score</th>
+          <th>Decision</th>
+          <th>Top deviating features</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        {% for anomaly, flow in rows %}
+        <tr>
+
+          {# Flow ID #}
+          <td class="mono">flow:{{ flow.id }}</td>
+
+          {# Timestamp #}
+          <td>{{ flow.first_seen | epoch }}</td>
+
+          {# Source → Destination #}
+          <td>{{ flow.src_ip }} → {{ flow.dst_ip }}</td>
+
+          {# Device role #}
+          <td>{{ flow.source_role }}</td>
+
+          {# Isolation score #}
+          <td class="mono">{{ '%.3f' | format(anomaly.score) }}</td>
+
+          {# Decision pill #}
+          <td>
+            {% if anomaly.unusual %}
+              <span class="pill purple">Unusual</span>
+            {% else %}
+              <span class="pill good">Within threshold</span>
+            {% endif %}
+          </td>
+
+          {# Top deviating features (up to 3) #}
+          <td>
+            {% for feat in anomaly.explanation[:3] %}
+              <small class="pre-wrap">
+                {{ feat.feature | replace('_', ' ') }}:
+                {{ feat.observed }}
+                · baseline median: {{ feat.baseline_median }}
+              </small>
+              {% if not loop.last %}<br>{% endif %}
+            {% endfor %}
+          </td>
+
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="empty-small">
+            No scored flows. Select normal baseline captures below,
+            then evaluate a separate capture.
+          </td>
+        </tr>
+        {% endfor %}
+
+      </tbody>
+    </table>
+  </div>
+
+</section>
+
+{# ─── Training section (collapsible) ──────────────────────────────────────── #}
+<details class="panel investigation-section">
+
+  <summary>Train or replace the baseline model</summary>
+
+  <p style="margin: 1rem 0 1.25rem;">
+    Select captures that represent <strong>normal, expected traffic</strong>
+    for your network. The Isolation Forest will learn what typical flow
+    behaviour looks like and flag future deviations. At least 20 extracted
+    flows are required. Training data and evaluation data
+    <strong>must not overlap</strong> — the model automatically excludes
+    training captures during evaluation.
+  </p>
+
+  <div class="notice" style="margin-bottom: 1.25rem;">
+    <strong>⚠ Warning:</strong>
+    Training data and evaluation data must not overlap.
+    The model excludes training captures during evaluation.
+  </div>
+
+  <form
+    method="post"
+    action="{{ url_for('schoolnet.train') }}"
+    class="form-grid"
+  >
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="analysis_id" value="{{ analysis.id if analysis else '' }}">
+
+    {# Baseline captures multi-select #}
+    <label>
+      Baseline captures
+      <select name="baseline_ids" multiple required size="5">
+        {% for a in analyses if a.status == 'complete' %}
+          <option value="{{ a.id }}">
+            {{ a.original_filename }} · {{ a.id[:8] }}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    {# Contamination #}
+    <label>
+      Contamination
+      <input
+        type="number"
+        name="contamination"
+        min="0.001"
+        max="0.5"
+        step="0.001"
+        value="0.05"
+      >
+    </label>
+
+    {# Estimators #}
+    <label>
+      Number of trees
+      <input
+        type="number"
+        name="estimators"
+        min="50"
+        max="1000"
+        value="200"
+      >
+    </label>
+
+    {# Confirmation checkbox #}
+    <label class="checkbox-label">
+      <input type="checkbox" name="baseline_confirm" value="yes" required>
+      I selected representative normal baseline traffic
+    </label>
+
+    <button type="submit" class="btn btn-ai">
+      Train baseline
+    </button>
+
+  </form>
+
+</details>
+
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+  (function () {
+    // Build label and data arrays from server-rendered row data
+    const labels = {{ rows | map(attribute=1) | map(attribute='id') | list | tojson }};
+    const scores = {{ rows | map(attribute=0) | map(attribute='score') | list | tojson }};
+    const unusual = {{ rows | map(attribute=0) | map(attribute='unusual') | list | tojson }};
+
+    const colours = unusual.map(function (u) {
+      return u ? '#9b7cff' : '#16c7b0';
+    });
+
+    const ac = schoolChart('anomaly-chart', 'bar', {});
+
+    if (ac) {
+      ac.data.labels = labels.map(function (id) { return 'flow:' + id; });
+      ac.data.datasets[0].data = scores;
+      ac.data.datasets[0].backgroundColor = colours;
+      ac.data.datasets[0].borderColor = colours;
+      ac.options.plugins.legend.display = false;
+      ac.update();
+    }
+  })();
+</script>
+{% endblock %}

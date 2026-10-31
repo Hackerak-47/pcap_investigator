@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - {{ analysis.original_filename }}{% endblock %}
+
+{% block content %}
+<!-- Status Banner if Processing -->
+{% if analysis.status == 'processing' %}
+<div class="alert alert-warning border-0 d-flex align-items-center justify-content-between p-3 mb-4 shadow-sm" id="processingBanner">
+    <div class="d-flex align-items-center gap-3">
+        <div class="spinner-border spinner-border-sm text-warning" role="status"></div>
+        <div>
+            <strong class="text-white">Analysis in Progress...</strong>
+            <div class="small text-secondary">The system is currently extracting packet metadata and evaluating threat rules. Page will auto-refresh when complete.</div>
+        </div>
+    </div>
+    <span class="badge bg-dark border border-warning text-warning px-3 py-2 font-monospace">
+        Packets Extracted: <span id="livePacketCount">{{ analysis.packet_count }}</span>
+    </span>
+</div>
+{% elif analysis.status == 'error' %}
+<div class="alert alert-danger border-0 mb-4 p-3 shadow-sm">
+    <div class="d-flex align-items-center gap-3">
+        <i class="fa-solid fa-triangle-exclamation fs-3 text-danger"></i>
+        <div>
+            <h5 class="text-white mb-1">Analysis Error Encountered</h5>
+            <p class="mb-0 text-white-50 small">{{ analysis.error_message or 'An unknown error occurred during parsing.' }}</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Top Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-lg-3">
+        <div class="soc-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <span class="text-secondary small text-uppercase fw-semibold">Total Packets</span>
+                    <div class="soc-stat-number text-white mt-1">{{ analysis.packet_count|number_format if analysis.packet_count is defined else analysis.packet_count }}</div>
+                </div>
+                <div class="p-2 rounded bg-surface text-info">
+                    <i class="fa-solid fa-layer-group fs-5"></i>
+                </div>
+            </div>
+            <div class="mt-2 text-secondary small font-monospace">
+                Duration: {{ analysis.duration|format_duration }}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-sm-6 col-lg-3">
+        <div class="soc-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <span class="text-secondary small text-uppercase fw-semibold">Threat Events</span>
+                    <div class="soc-stat-number text-cyber-blue mt-1">{{ threat_events|length }}</div>
+                </div>
+                <div class="p-2 rounded bg-surface text-warning">
+                    <i class="fa-solid fa-triangle-exclamation fs-5"></i>
+                </div>
+            </div>
+            <div class="mt-2 text-secondary small">
+                <span class="text-danger fw-semibold">{{ severity_counts.CRITICAL }} Critical</span> &bull; 
+                <span class="text-warning fw-semibold">{{ severity_counts.HIGH }} High</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-sm-6 col-lg-3">
+        <div class="soc-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <span class="text-secondary small text-uppercase fw-semibold">Unique Source IPs</span>
+                    <div class="soc-stat-number text-white mt-1">{{ stats.unique_src_ips if stats.unique_src_ips is defined else 0 }}</div>
+                </div>
+                <div class="p-2 rounded bg-surface text-success">
+                    <i class="fa-solid fa-laptop-code fs-5"></i>
+                </div>
+            </div>
+            <div class="mt-2 text-secondary small font-monospace">
+                Traffic: {{ stats.total_bytes|format_bytes if stats.total_bytes is defined else '0 B' }}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-sm-6 col-lg-3">
+        <div class="soc-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <span class="text-secondary small text-uppercase fw-semibold">Target Hosts</span>
+                    <div class="soc-stat-number text-white mt-1">{{ stats.unique_dst_ips if stats.unique_dst_ips is defined else 0 }}</div>
+                </div>
+                <div class="p-2 rounded bg-surface text-secondary">
+                    <i class="fa-solid fa-server fs-5"></i>
+                </div>
+            </div>
+            <div class="mt-2 text-secondary small font-monospace">
+                Unique Dst: {{ stats.unique_dst_ips if stats.unique_dst_ips is defined else 0 }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Section -->
+<div class="row g-4 mb-4">
+    <!-- Protocol Distribution -->
+    <div class="col-lg-4 col-md-6">
+        <div class="soc-card h-100">
+            <h6 class="text-white font-monospace mb-3 d-flex align-items-center justify-content-between">
+                <span><i class="fa-solid fa-chart-pie text-info me-2"></i> Protocol Distribution</span>
+            </h6>
+            <div style="height: 220px; position: relative;">
+                <canvas id="protocolChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Threat Severity Breakdown -->
+    <div class="col-lg-4 col-md-6">
+        <div class="soc-card h-100">
+            <h6 class="text-white font-monospace mb-3 d-flex align-items-center justify-content-between">
+                <span><i class="fa-solid fa-chart-bar text-warning me-2"></i> Severity Distribution</span>
+            </h6>
+            <div style="height: 220px; position: relative;">
+                <canvas id="severityChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Destination Ports -->
+    <div class="col-lg-4 col-md-12">
+        <div class="soc-card h-100">
+            <h6 class="text-white font-monospace mb-3 d-flex align-items-center justify-content-between">
+                <span><i class="fa-solid fa-network-wired text-cyber-green me-2"></i> Top Targeted Ports</span>
+            </h6>
+            <div style="height: 220px; position: relative;">
+                <canvas id="portsChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Threat Events Table -->
+<div class="card bg-surface border border-secondary border-opacity-25 shadow-sm mb-4">
+    <div class="card-header bg-surface-elevated border-bottom border-secondary border-opacity-25 py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h5 class="text-white mb-0 font-monospace">
+                <i class="fa-solid fa-triangle-exclamation text-danger me-2"></i> Detected Threat Events
+            </h5>
+            <span class="text-secondary small">Click any event row to inspect technical forensic evidence &amp; Wireshark filters</span>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('timeline', analysis_id=analysis.id) }}" class="btn btn-sm btn-cyber-primary">
+                <i class="fa-solid fa-timeline me-1"></i> View Timeline
+            </a>
+            <a href="{{ url_for('events', analysis_id=analysis.id) }}" class="btn btn-sm btn-outline-secondary">
+                View All Events ({{ threat_events|length }})
+            </a>
+        </div>
+    </div>
+    
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-cyber align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-3">Time</th>
+                        <th>Threat Type</th>
+                        <th>Source IP</th>
+                        <th>Destination</th>
+                        <th>Severity</th>
+                        <th>Risk Score</th>
+                        <th>Confidence</th>
+                        <th class="text-end pe-3">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if threat_events %}
+                        {% for event in threat_events %}
+                        <tr style="cursor: pointer;" onclick="openEvidenceModal({{ event.id }})" id="row-{{ event.id }}">
+                            <td class="ps-3 font-monospace small text-secondary">
+                                {{ event.timestamp.strftime('%H:%M:%S') if event.timestamp else 'N/A' }}
+                            </td>
+                            <td>
+                                <span class="fw-semibold text-white">
+                                    {{ event.event_type.replace('_', ' ') }}
+                                </span>
+                            </td>
+                            <td class="font-monospace text-info small">
+                                {{ event.source_ip or 'N/A' }}
+                            </td>
+                            <td class="font-monospace text-secondary small">
+                                {{ event.destination_ip or 'N/A' }}
+                            </td>
+                            <td>
+                                <span class="badge {{ event.severity|severity_badge }}">
+                                    {{ event.severity }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="fw-bold font-monospace {% if event.risk_score >= 80 %}text-danger{% elif event.risk_score >= 60 %}text-warning{% else %}text-info{% endif %}">
+                                        {{ event.risk_score|round(0)|int }}/100
+                                    </span>
+                                </div>
+                            </td>
+                            <td class="small text-secondary">
+                                {{ ((event.confidence or 0) * 100)|round(0)|int }}%
+                            </td>
+                            <td class="text-end pe-3" onclick="event.stopPropagation();">
+                                <button class="btn btn-sm btn-outline-info" onclick="openEvidenceModal({{ event.id }})">
+                                    <i class="fa-solid fa-magnifying-glass me-1"></i> Evidence
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center py-4 text-secondary">
+                                <i class="fa-solid fa-shield-check text-success fs-3 mb-2 d-block"></i>
+                                No threat events detected in this packet capture.
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for Inspecting Threat Event Evidence -->
+<div class="modal fade" id="evidenceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content bg-surface-elevated border border-secondary border-opacity-50 text-light">
+            <div class="modal-header border-bottom border-secondary border-opacity-25">
+                <h5 class="modal-title font-monospace" id="modalEventTitle">Threat Evidence Details</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="text-secondary small">Event Type</label>
+                        <div id="modalEventType" class="fw-bold text-white"></div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="text-secondary small">Severity</label>
+                        <div id="modalSeverity"></div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="text-secondary small">Risk Score</label>
+                        <div id="modalRiskScore" class="fw-bold font-monospace"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="text-secondary small">Source Host</label>
+                        <div id="modalSource" class="font-monospace text-info"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="text-secondary small">Destination</label>
+                        <div id="modalDestination" class="font-monospace text-secondary"></div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="text-secondary small">Analyst Description</label>
+                    <div id="modalDescription" class="p-3 bg-surface rounded border border-secondary border-opacity-25 small"></div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="text-secondary small">Structured Forensic Evidence</label>
+                    <pre id="modalEvidenceJson" class="code-box mb-0" style="max-height: 180px; overflow-y: auto;"></pre>
+                </div>
+
+                <div>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="text-secondary small">Wireshark Validation Display Filter</label>
+                        <button class="btn btn-sm btn-link text-info p-0 text-decoration-none" onclick="copyWiresharkFilter()">
+                            <i class="fa-regular fa-copy me-1"></i> Copy Filter
+                        </button>
+                    </div>
+                    <div id="modalWiresharkFilter" class="code-box text-warning font-monospace"></div>
+                </div>
+            </div>
+            <div class="modal-footer border-top border-secondary border-opacity-25">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const ANALYSIS_ID = "{{ analysis.id }}";
+    const IS_PROCESSING = {{ 'true' if analysis.status == 'processing' else 'false' }};
+    const PROTOCOL_STATS = {{ stats.protocol_distribution|tojson if stats.protocol_distribution else '{}' }};
+    const SEVERITY_COUNTS = {{ severity_counts|tojson if severity_counts else '{}' }};
+    const PORT_STATS = {{ stats.top_dst_ports|tojson if stats.top_dst_ports else '{}' }};
+</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

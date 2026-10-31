@@ -1,0 +1,39 @@
+# Environment & Secret files (CRITICAL: NEVER COMMIT KEYS)
+.env
+.env.local
+*.pem
+*.key
+keys/
+
+# Python virtual environment & cache
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# SQLite databases & runtime data
+*.db
+*.sqlite
+*.sqlite3
+pcap_investigator.db
+pcap_investigator.pre-schoolnet.db
+
+# Logs
+*.log
+server.stdout.log
+server.stderr.log
+
+# Uploads & Runtime Artifacts
+uploads/
+models_store/
+reports_output/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Vercel deployment cache
+.vercel

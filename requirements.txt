@@ -1,0 +1,29 @@
+# Requirements for Intelligent PCAP Investigation & Attack Timeline System
+
+# Web Framework & ORM
+Flask>=3.0.0
+Flask-SQLAlchemy>=3.1.1
+SQLAlchemy>=2.0.25
+Werkzeug>=3.0.1
+python-dotenv>=1.0.0
+
+# Network Packet Dissection
+pyshark>=0.6
+
+# PDF Investigation Reporting
+reportlab>=4.0.0
+
+# AI Provider Integrations (Google Gemini & OpenAI)
+google-genai>=1.0.0
+openai>=1.12.0
+
+# Utilities
+requests>=2.31.0
+
+# SchoolNet AI Core
+scapy>=2.6
+scikit-learn>=1.6
+numpy>=2.0
+joblib>=1.4
+cryptography>=44
+pytest>=8

@@ -1,0 +1,262 @@
+{% extends 'base.html' %}
+{% block content %}
+
+{# ── Page heading ─────────────────────────────────────────────────────────── #}
+<div class="page-heading">
+    <div>
+        <p class="eyebrow">
+            <span class="heading-dot"></span>
+            NETWORK OPERATIONS
+        </p>
+        <h1>Security overview.</h1>
+    </div>
+
+    {# Analysis selector #}
+    <form method="GET" action="{{ url_for('schoolnet.overview') }}" class="d-flex align-items-center gap-2">
+        <label for="analysis-select" class="subtle small">Analysis</label>
+        <select
+            id="analysis-select"
+            name="analysis_id"
+            class="form-select form-select-sm"
+            style="min-width: 240px; background: var(--bg-surface-elevated); border-color: var(--line); color: var(--text-primary);"
+            onchange="this.form.submit()"
+        >
+            <option value="">— select a capture —</option>
+            {% for a in analyses %}
+            <option value="{{ a.id }}" {% if analysis and a.id == analysis.id %}selected{% endif %}>
+                {{ a.original_filename }} &mdash; {{ a.created_at | epoch }}
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+{# ── Empty state (no analysis selected) ───────────────────────────────────── #}
+{% if not analysis %}
+<div class="empty-state">
+    <i class="fa-solid fa-satellite-dish" style="font-size: 3rem; color: var(--cyan); margin-bottom: 1rem;"></i>
+    <h2>Your investigation starts here</h2>
+    <p class="subtle">Upload a PCAP file and run an analysis to see your network security posture.</p>
+    <a href="{{ url_for('schoolnet.analysis_page') }}" class="btn btn-cyber-primary mt-2">
+        <i class="fa-solid fa-arrow-up-from-bracket me-2"></i>Upload a capture
+    </a>
+</div>
+
+{% else %}
+
+{# ── Notice: analysis exists but no context yet ────────────────────────────── #}
+{% if not context %}
+<div class="notice mb-4">
+    <i class="fa-solid fa-circle-info me-2" style="color: var(--amber);"></i>
+    <span>
+        This capture has not been enriched with ML or flow analysis yet.
+        Extend the analysis to unlock the full detection engine.
+    </span>
+    <form method="POST" action="{{ url_for('schoolnet.enrich') }}" class="d-inline ms-3">
+        <input type="hidden" name="analysis_id" value="{{ analysis.id }}">
+        <button type="submit" class="btn btn-sm btn-outline-info">
+            Extend this analysis
+        </button>
+    </form>
+</div>
+{% endif %}
+
+{# ── Metric grid ──────────────────────────────────────────────────────────── #}
+<div class="metric-grid" style="--cols: 5;">
+
+    <article class="metric">
+        <div class="metric-label">
+            <i class="fa-solid fa-layer-group" style="color: var(--cyan);"></i>
+            Packets analysed
+        </div>
+        <strong>{{ totals.packets | default(0) | int | format_number if totals else 0 }}</strong>
+        <small>Total captured frames</small>
+    </article>
+
+    <article class="metric">
+        <div class="metric-label">
+            <i class="fa-solid fa-network-wired" style="color: var(--teal);"></i>
+            Devices identified
+        </div>
+        <strong>{{ totals.devices | default(0) }}</strong>
+        <small>Unique IP endpoints</small>
+    </article>
+
+    <article class="metric">
+        <div class="metric-label">
+            <i class="fa-solid fa-shield-halved" style="color: var(--cyan);"></i>
+            Security incidents
+        </div>
+        <strong>{{ totals.incidents | default(0) }}</strong>
+        <small>Flagged events</small>
+    </article>
+
+    <article class="metric">
+        <div class="metric-label">
+            <i class="fa-solid fa-wave-square" style="color: var(--purple);"></i>
+            ML anomalies
+        </div>
+        <strong>{{ totals.anomalies | default(0) }}</strong>
+        <small>Model detections</small>
+    </article>
+
+    <article class="metric">
+        <div class="metric-label">
+            <i class="fa-solid fa-triangle-exclamation" style="color: var(--red);"></i>
+            High priority
+        </div>
+        <strong>{{ totals.high | default(0) }}</strong>
+        <small>Needs attention</small>
+    </article>
+
+</div>
+
+{# ── Dashboard grid: 3 charts ─────────────────────────────────────────────── #}
+<div class="dashboard-grid" style="margin-top: 1.5rem;">
+
+    {# Protocol distribution #}
+    <div class="panel">
+        <div class="panel-head">
+            <span>Protocol distribution</span>
+            <span class="pill cyan">Doughnut</span>
+        </div>
+        <div class="chart-wrap">
+            <canvas id="protocol-chart"></canvas>
+        </div>
+    </div>
+
+    {# Investigation priority #}
+    <div class="panel">
+        <div class="panel-head">
+            <span>Investigation priority</span>
+            <span class="pill amber">Risk levels</span>
+        </div>
+        <div class="chart-wrap">
+            <canvas id="risk-chart"></canvas>
+        </div>
+    </div>
+
+    {# Device activity #}
+    <div class="panel">
+        <div class="panel-head">
+            <span>Device activity</span>
+            <span class="pill purple">Top IPs</span>
+        </div>
+        <div class="chart-wrap">
+            <canvas id="activity-chart"></canvas>
+        </div>
+    </div>
+
+</div>
+
+{# ── Split grid: timeline + hybrid engine ─────────────────────────────────── #}
+<div class="split-grid" style="margin-top: 1.5rem;">
+
+    {# Left: Recent incident timeline #}
+    <div class="panel">
+        <div class="panel-head">
+            <span>Recent incident timeline</span>
+            {% if incidents %}
+            <a href="{{ url_for('schoolnet.incidents') }}" class="btn btn-sm btn-outline-info">
+                View all
+            </a>
+            {% endif %}
+        </div>
+
+        {% if incidents %}
+        {% for incident in incidents[-6:] | reverse %}
+        <a
+            href="{{ url_for('schoolnet.incident', iid=incident.id) }}"
+            class="timeline-row"
+            style="text-decoration: none;"
+        >
+            <span class="timeline-dot {{ incident.risk | lower }}"></span>
+            <div class="timeline-body">
+                <span class="mono small">{{ incident.source_ip }}</span>
+                <i class="fa-solid fa-arrow-right mx-1 subtle" style="font-size: 0.65rem;"></i>
+                <span class="mono small">{{ incident.destination_ip }}</span>
+            </div>
+            <div class="timeline-meta">
+                <span class="subtle small">{{ incident.first_seen | epoch }}</span>
+                <span class="pill {{ incident.risk | lower }} ms-2">{{ incident.risk }}</span>
+            </div>
+        </a>
+        {% endfor %}
+
+        {% else %}
+        <div class="empty-small">
+            <i class="fa-solid fa-shield-check" style="color: var(--green);"></i>
+            <p>No incidents recorded for this analysis.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    {# Right: Hybrid detection engine #}
+    <div class="panel">
+        <div class="panel-head">
+            <span>Hybrid detection engine</span>
+        </div>
+
+        <p class="eyebrow mb-1">
+            <span class="heading-dot"></span>
+            HYBRID DETECTION
+        </p>
+        <p class="subtle small mb-3">
+            SchoolNet AI combines deterministic rule matching, unsupervised ML
+            anomaly detection, and analyst-controlled confirmation to surface
+            real threats with minimal false positives.
+        </p>
+
+        <div class="engine-row">
+            <span class="engine-label">
+                <i class="fa-solid fa-water me-2" style="color: var(--cyan);"></i>
+                Network flows
+            </span>
+            <span class="pill cyan">{{ flow_count }} flows</span>
+        </div>
+
+        <div class="engine-row">
+            <span class="engine-label">
+                <i class="fa-solid fa-wave-square me-2" style="color: var(--purple);"></i>
+                ML pipeline
+            </span>
+            {% if context %}
+            <span class="pill {{ 'good' if context.ml_status == 'complete' else 'amber' }}">
+                {{ context.ml_status | title }}
+            </span>
+            {% else %}
+            <span class="pill low">Not run</span>
+            {% endif %}
+        </div>
+
+        <div class="engine-row">
+            <span class="engine-label">
+                <i class="fa-solid fa-user-shield me-2" style="color: var(--teal);"></i>
+                Confirmation
+            </span>
+            <span class="pill cyan">Analyst controlled</span>
+        </div>
+
+        <div class="mt-4">
+            <a href="{{ url_for('schoolnet.investigator') }}" class="btn btn-ai w-100">
+                Open AI Investigator ↗
+            </a>
+        </div>
+    </div>
+
+</div>
+{# end if analysis #}
+{% endif %}
+
+{% endblock %}
+
+
+{% block scripts %}
+{% if analysis and protocols %}
+<script>
+    schoolChart('protocol-chart', 'doughnut', {{ protocols | tojson }});
+    schoolChart('risk-chart',     'bar',       {{ risk_counts | tojson }});
+    schoolChart('activity-chart', 'bar',       {{ activity | tojson }}, true);
+</script>
+{% endif %}
+{% endblock %}

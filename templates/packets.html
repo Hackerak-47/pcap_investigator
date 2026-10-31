@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}Packet Explorer - {{ analysis.original_filename }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h3 class="text-white fw-bold mb-0">
+            <i class="fa-solid fa-list-check text-cyber-blue me-2"></i> Packet Explorer
+        </h3>
+        <p class="text-secondary small mb-0">
+            Showing {{ packets|length }} of {{ total }} total packets (Page {{ page }} of {{ total_pages }})
+        </p>
+    </div>
+    <div>
+        <a href="{{ url_for('dashboard', analysis_id=analysis.id) }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fa-solid fa-arrow-left me-1"></i> Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- Packet Filters Card -->
+<div class="soc-card p-3 mb-4">
+    <form method="GET" action="{{ url_for('packets', analysis_id=analysis.id) }}" class="row g-2 align-items-end">
+        <div class="col-md-3 col-sm-6">
+            <label class="text-secondary small">Source IP</label>
+            <input type="text" name="src_ip" value="{{ filters.src_ip }}" class="form-control form-control-sm bg-surface text-light border-secondary border-opacity-50 font-monospace" placeholder="e.g. 192.168.1.105">
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <label class="text-secondary small">Destination IP</label>
+            <input type="text" name="dst_ip" value="{{ filters.dst_ip }}" class="form-control form-control-sm bg-surface text-light border-secondary border-opacity-50 font-monospace" placeholder="e.g. 192.168.1.50">
+        </div>
+        <div class="col-md-2 col-sm-4">
+            <label class="text-secondary small">Protocol</label>
+            <select name="protocol" class="form-select form-select-sm bg-surface text-light border-secondary border-opacity-50 font-monospace">
+                <option value="">All Protocols</option>
+                {% for proto in protocols %}
+                    <option value="{{ proto }}" {% if filters.protocol == proto %}selected{% endif %}>{{ proto }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2 col-sm-4">
+            <label class="text-secondary small">Dst Port</label>
+            <input type="text" name="dst_port" value="{{ filters.dst_port }}" class="form-control form-control-sm bg-surface text-light border-secondary border-opacity-50 font-monospace" placeholder="e.g. 22">
+        </div>
+        <div class="col-md-2 col-sm-4 d-flex gap-2">
+            <button type="submit" class="btn btn-cyber-primary btn-sm w-100">
+                <i class="fa-solid fa-filter me-1"></i> Filter
+            </button>
+            <a href="{{ url_for('packets', analysis_id=analysis.id) }}" class="btn btn-outline-secondary btn-sm" title="Clear Filters">
+                <i class="fa-solid fa-rotate-left"></i>
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- Packet Table -->
+<div class="card bg-surface border border-secondary border-opacity-25 shadow-sm mb-4">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-cyber table-hover align-middle mb-0 font-monospace small">
+                <thead>
+                    <tr>
+                        <th class="ps-3" style="width: 70px;">No.</th>
+                        <th style="width: 130px;">Timestamp</th>
+                        <th>Source IP:Port</th>
+                        <th>Destination IP:Port</th>
+                        <th>Protocol</th>
+                        <th>Length</th>
+                        <th>TCP Flags</th>
+                        <th>Info / Payload Metadata</th>
+                        <th class="text-end pe-3">Inspect</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if packets %}
+                        {% for p in packets %}
+                        <tr>
+                            <td class="ps-3 text-secondary">{{ p.packet_number }}</td>
+                            <td class="text-secondary">{{ p.timestamp.strftime('%H:%M:%S.%f')[:12] if p.timestamp else 'N/A' }}</td>
+                            <td class="text-info">
+                                {{ p.src_ip or '—' }}{% if p.src_port %}:{{ p.src_port }}{% endif %}
+                            </td>
+                            <td class="text-secondary">
+                                {{ p.dst_ip or '—' }}{% if p.dst_port %}:{{ p.dst_port }}{% endif %}
+                            </td>
+                            <td>
+                                <span class="badge {% if p.protocol == 'TCP' %}bg-primary{% elif p.protocol == 'UDP' %}bg-info text-dark{% elif p.protocol == 'DNS' %}bg-warning text-dark{% elif p.protocol == 'HTTP' %}bg-success{% elif p.protocol == 'ICMP' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                    {{ p.protocol }}
+                                </span>
+                            </td>
+                            <td>{{ p.packet_length }} B</td>
+                            <td class="text-secondary">{{ p.tcp_flags or '—' }}</td>
+                            <td>
+                                {% if p.dns_query %}
+                                    <span class="text-warning">DNS: {{ p.dns_query[:45] }}</span>
+                                {% elif p.http_method %}
+                                    <span class="text-success">{{ p.http_method }} {{ p.http_host or '' }}{{ p.http_uri or '' }}</span>
+                                {% elif p.tls_sni %}
+                                    <span class="text-info">TLS SNI: {{ p.tls_sni }}</span>
+                                {% elif p.icmp_type is not none %}
+                                    <span class="text-danger">ICMP Type: {{ p.icmp_type }} Code: {{ p.icmp_code }}</span>
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end pe-3">
+                                <button class="btn btn-xs btn-outline-info py-0 px-2" onclick='showPacketDetails({{ p.id }}, {{ p.to_dict()|tojson }})'>
+                                    <i class="fa-solid fa-code"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="9" class="text-center py-4 text-secondary">
+                                No packets match the active filter criteria.
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination Footer -->
+    {% if total_pages > 1 %}
+    <div class="card-footer bg-surface-elevated border-top border-secondary border-opacity-25 py-2 px-3 d-flex justify-content-between align-items-center">
+        <div class="small text-secondary">
+            Page {{ page }} of {{ total_pages }}
+        </div>
+        <ul class="pagination pagination-sm mb-0">
+            <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                <a class="page-link bg-dark text-light border-secondary" href="{{ url_for('packets', analysis_id=analysis.id, page=page-1, **filters) }}">
+                    &laquo; Previous
+                </a>
+            </li>
+            
+            {% set start_page = [1, page - 2]|max %}
+            {% set end_page = [total_pages, page + 2]|min %}
+            {% for p_num in range(start_page, end_page + 1) %}
+                <li class="page-item {% if p_num == page %}active{% endif %}">
+                    <a class="page-link {% if p_num == page %}bg-info border-info text-dark fw-bold{% else %}bg-dark text-light border-secondary{% endif %}" href="{{ url_for('packets', analysis_id=analysis.id, page=p_num, **filters) }}">
+                        {{ p_num }}
+                    </a>
+                </li>
+            {% endfor %}
+
+            <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                <a class="page-link bg-dark text-light border-secondary" href="{{ url_for('packets', analysis_id=analysis.id, page=page+1, **filters) }}">
+                    Next &raquo;
+                </a>
+            </li>
+        </ul>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal for Raw Packet Details -->
+<div class="modal fade" id="packetModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content bg-surface-elevated border border-secondary border-opacity-50 text-light">
+            <div class="modal-header border-bottom border-secondary border-opacity-25">
+                <h5 class="modal-title font-monospace" id="packetModalTitle">Packet Metadata</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <pre id="packetJsonContent" class="code-box mb-0" style="max-height: 400px; overflow-y: auto;"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showPacketDetails(pktId, pktData) {
+    document.getElementById('packetModalTitle').textContent = `Packet #${pktData.packet_number} Extracted Metadata`;
+    document.getElementById('packetJsonContent').textContent = JSON.stringify(pktData, null, 2);
+    const modal = new bootstrap.Modal(document.getElementById('packetModal'));
+    modal.show();
+}
+</script>
+{% endblock %}

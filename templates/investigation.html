@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}AI Investigation - {{ analysis.original_filename }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h3 class="text-white fw-bold mb-0">
+            <i class="fa-solid fa-brain text-cyber-blue me-2"></i> AI Incident Investigation Report
+        </h3>
+        <p class="text-secondary small mb-0">
+            Automated intelligence synthesis converting forensic PCAP packet evidence into an executive incident dossier.
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <form action="{{ url_for('generate_investigation_route', analysis_id=analysis.id) }}" method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="btn btn-outline-info btn-sm">
+                <i class="fa-solid fa-arrows-rotate me-1"></i> Re-generate Analysis
+            </button>
+        </form>
+        <a href="{{ url_for('report_download', analysis_id=analysis.id) }}" class="btn btn-cyber-primary btn-sm">
+            <i class="fa-solid fa-file-pdf me-1"></i> Download PDF Report
+        </a>
+    </div>
+</div>
+
+<!-- Investigation Mode Badge -->
+<div class="mb-4">
+    {% if investigation and investigation.ai_generated %}
+        <div class="alert alert-info border-0 p-3 shadow-sm d-flex align-items-center justify-content-between">
+            <div>
+                <i class="fa-solid fa-wand-magic-sparkles text-info me-2"></i>
+                <strong>LLM AI Provider Active:</strong> Synthesized via OpenAI Model (<code>{{ investigation.ai_model }}</code>)
+            </div>
+            <span class="badge bg-dark border border-info text-info">AI Assisted</span>
+        </div>
+    {% else %}
+        <div class="alert alert-secondary border-0 p-3 shadow-sm d-flex align-items-center justify-content-between bg-surface-elevated">
+            <div>
+                <i class="fa-solid fa-shield-halved text-cyber-green me-2"></i>
+                <strong>Deterministic Rule-Based Intelligence:</strong> Generated using built-in forensic heuristic correlation engine.
+                <span class="text-secondary small ms-2">(No external OpenAI API key required)</span>
+            </div>
+            <span class="badge bg-dark border border-secondary text-secondary">Deterministic Fallback</span>
+        </div>
+    {% endif %}
+</div>
+
+{% if investigation %}
+<div class="row g-4 mb-4">
+    <!-- 1. Executive Summary -->
+    <div class="col-lg-12">
+        <div class="soc-card p-4">
+            <h5 class="text-white font-monospace mb-3 d-flex align-items-center gap-2">
+                <i class="fa-solid fa-newspaper text-info"></i>
+                <span>1. Executive Summary</span>
+            </h5>
+            <p class="lead text-light mb-0" style="font-size: 1.05rem; line-height: 1.6;">
+                {{ investigation.executive_summary }}
+            </p>
+        </div>
+    </div>
+
+    <!-- 2. Attack Hypothesis -->
+    <div class="col-lg-8">
+        <div class="soc-card p-4 h-100">
+            <h5 class="text-white font-monospace mb-3 d-flex align-items-center gap-2">
+                <i class="fa-solid fa-diagram-project text-warning"></i>
+                <span>2. Attack Hypothesis &amp; Reconstruction</span>
+            </h5>
+            <div class="p-3 bg-surface rounded border border-secondary border-opacity-25 text-light small" style="white-space: pre-line; line-height: 1.7;">
+                {{ investigation.attack_hypothesis }}
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Overall Risk Assessment -->
+    <div class="col-lg-4">
+        <div class="soc-card p-4 h-100">
+            <h5 class="text-white font-monospace mb-3 d-flex align-items-center gap-2">
+                <i class="fa-solid fa-gauge-high text-danger"></i>
+                <span>3. Risk Assessment</span>
+            </h5>
+            <div class="p-3 bg-surface rounded border border-secondary border-opacity-25 text-light small mb-3">
+                {{ investigation.risk_assessment }}
+            </div>
+            <div class="font-monospace small text-secondary">
+                Dossier Generated: {{ investigation.generated_at.strftime('%Y-%m-%d %H:%M UTC') if investigation.generated_at else 'N/A' }}
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Explicit Separation: Observed Evidence vs Inferred Hypothesis -->
+    <div class="col-lg-6">
+        <div class="soc-card p-4 h-100 border-info border-opacity-50">
+            <h5 class="text-info font-monospace mb-2 d-flex align-items-center gap-2">
+                <i class="fa-solid fa-eye"></i>
+                <span>Directly Observed Evidence (PCAP Facts)</span>
+            </h5>
+            <p class="text-secondary small mb-3">Definite observations derived from raw packet headers and protocol fields:</p>
+            <ul class="list-group list-group-flush bg-transparent small">
+                {% set obs = investigation.to_dict().evidence_observed %}
+                {% if obs %}
+                    {% for item in obs %}
+                    <li class="list-group-item bg-transparent text-light border-secondary border-opacity-25 px-0 py-2">
+                        <i class="fa-solid fa-circle-check text-success me-2"></i> {{ item }}
+                    </li>
+                    {% endfor %}
+                {% else %}
+                    <li class="list-group-item bg-transparent text-secondary px-0">No direct evidence items stored.</li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="soc-card p-4 h-100 border-purple border-opacity-50" style="border-color: rgba(139, 92, 246, 0.4);">
+            <h5 class="font-monospace mb-2 d-flex align-items-center gap-2" style="color: #c4b5fd;">
+                <i class="fa-solid fa-brain"></i>
+                <span>Analyst Inferences &amp; Deductions</span>
+            </h5>
+            <p class="text-secondary small mb-3">Probable interpretations and contextual hypotheses based on threat correlation:</p>
+            <ul class="list-group list-group-flush bg-transparent small">
+                {% set inf = investigation.to_dict().evidence_inferred %}
+                {% if inf %}
+                    {% for item in inf %}
+                    <li class="list-group-item bg-transparent text-light border-secondary border-opacity-25 px-0 py-2">
+                        <i class="fa-solid fa-lightbulb text-warning me-2"></i> {{ item }}
+                    </li>
+                    {% endfor %}
+                {% else %}
+                    <li class="list-group-item bg-transparent text-secondary px-0">No analyst inferences stored.</li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+
+    <!-- 5. Affected Hosts Profile -->
+    <div class="col-lg-12">
+        <div class="soc-card p-4">
+            <h5 class="text-white font-monospace mb-3 d-flex align-items-center gap-2">
+                <i class="fa-solid fa-network-wired text-cyber-blue"></i>
+                <span>4. Affected Host Profiles</span>
+            </h5>
+            <div class="table-responsive">
+                <table class="table table-cyber align-middle mb-0 font-monospace small">
+                    <thead>
+                        <tr>
+                            <th>Host IP</th>
+                            <th>Identified Role</th>
+                            <th>Forensic Context / Activity Summary</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set hosts = investigation.to_dict().affected_hosts %}
+                        {% if hosts %}
+                            {% for h in hosts %}
+                            <tr>
+                                <td class="text-info fw-bold">{{ h.ip }}</td>
+                                <td>
+                                    <span class="badge {% if 'Attacker' in h.role or 'Source' in h.role %}bg-danger{% elif 'Victim' in h.role or 'Target' in h.role %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                                        {{ h.role }}
+                                    </span>
+                                </td>
+                                <td class="text-light">{{ h.notes }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="3" class="text-center text-secondary py-3">No host profiles extracted.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. Recommended Actions (Prioritized) -->
+    <div class="col-lg-12">
+        <div class="soc-card p-4 border-warning border-opacity-25">
+            <h5 class="text-white font-monospace mb-3 d-flex align-items-center gap-2">
+                <i class="fa-solid fa-clipboard-check text-success"></i>
+                <span>5. Recommended Containment &amp; Investigative Actions</span>
+            </h5>
+            <div class="row g-3">
+                {% set recs = investigation.to_dict().recommendations %}
+                {% if recs %}
+                    {% for rec in recs %}
+                    <div class="col-md-6">
+                        <div class="p-3 bg-surface rounded border border-secondary border-opacity-25 h-100">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="text-white mb-0 fw-bold">{{ rec.action if rec.action is defined else rec }}</h6>
+                                {% if rec.priority is defined %}
+                                <span class="badge {% if rec.priority == 'IMMEDIATE' %}bg-danger{% elif rec.priority == 'HIGH' %}bg-warning text-dark{% else %}bg-info text-dark{% endif %} font-monospace">
+                                    {{ rec.priority }}
+                                </span>
+                                {% endif %}
+                            </div>
+                            <p class="text-secondary small mb-0">
+                                {{ rec.detail if rec.detail is defined else '' }}
+                            </p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="col-12 text-secondary">No recommendations recorded.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="soc-card text-center py-5">
+    <i class="fa-solid fa-spinner fa-spin text-info fs-1 mb-3"></i>
+    <h5 class="text-white">Investigation Generating...</h5>
+    <p class="text-secondary small">Please wait while the AI module correlates packet metadata into a forensic report.</p>
+</div>
+{% endif %}
+{% endblock %}

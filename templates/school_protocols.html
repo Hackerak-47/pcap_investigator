@@ -1,0 +1,241 @@
+{% extends 'base.html' %}
+{% block title %}Protocol Security · SchoolNet AI{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+    <div>
+        <div class="eyebrow">TRANSPORT & APPLICATION SECURITY</div>
+        <h1>Protocol security<span class="heading-dot">.</span></h1>
+        <p>Inspect what network captures establish regarding cleartext channels, TLS handshakes, and cryptographic posture.</p>
+    </div>
+    {% if analysis %}
+    <form method="get" class="filters">
+        <select name="analysis_id" onchange="this.form.submit()" aria-label="Select capture">
+            {% for a in analyses %}
+            <option value="{{ a.id }}" {{ 'selected' if analysis and analysis.id == a.id }}>
+                {{ a.original_filename }} · {{ a.id[:8] }}
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+    {% endif %}
+</div>
+
+{% if protocols and analysis %}
+<!-- Security Notice -->
+<div class="notice">
+    <i class="fa-solid fa-circle-info cyan"></i>
+    <strong>Cryptographic Grounding:</strong> {{ protocols.note }}
+</div>
+
+<!-- Metrics Overview -->
+<div class="metric-grid">
+    <article class="metric">
+        <div class="metric-label">
+            Protocols observed
+            <i class="fa-solid fa-diagram-project cyan"></i>
+        </div>
+        <strong>{{ protocols.protocols|length }}</strong>
+        <small>Active layer-4/7 protocols</small>
+    </article>
+    <article class="metric">
+        <div class="metric-label">
+            TLS packets
+            <i class="fa-solid fa-lock teal"></i>
+        </div>
+        <strong>{{ '{:,}'.format(protocols.tls_packets) }}</strong>
+        <small>Encrypted transport packets</small>
+    </article>
+    <article class="metric">
+        <div class="metric-label">
+            TLS handshakes
+            <i class="fa-solid fa-handshake purple"></i>
+        </div>
+        <strong>{{ '{:,}'.format(protocols.handshakes) }}</strong>
+        <small>Observed ServerHello records</small>
+    </article>
+    <article class="metric">
+        <div class="metric-label">
+            Security findings
+            <i class="fa-solid fa-triangle-exclamation {{ 'red' if protocols.findings else 'good' }}"></i>
+        </div>
+        <strong class="{{ 'red' if protocols.findings else 'good' }}">{{ protocols.findings|length }}</strong>
+        <small>{{ 'Weaknesses flagged' if protocols.findings else 'No insecure config detected' }}</small>
+    </article>
+</div>
+
+<!-- Protocol Breakdown Grid -->
+<div class="dashboard-grid">
+    <!-- Chart Column -->
+    <section class="panel">
+        <div class="panel-heading">
+            <h2>Protocol distribution</h2>
+            <span class="subtle">PACKET COUNT</span>
+        </div>
+        <div class="chart-wrap">
+            <canvas id="protocol-security-chart"></canvas>
+        </div>
+        <small class="subtle" style="margin-top: 10px;">Relative volume of observed network protocols.</small>
+    </section>
+
+    <!-- TLS Versions Column -->
+    <section class="panel">
+        <div class="panel-heading">
+            <h2>Negotiated TLS versions</h2>
+            <span class="subtle">SERVER HELLO</span>
+        </div>
+        {% if protocols.versions %}
+            {% for v, count in protocols.versions.items() %}
+            <div class="engine-row">
+                <span class="mono">{{ v }}</span>
+                <div>
+                    <strong style="margin-right: 8px;">{{ count }} session(s)</strong>
+                    {% if v in ['TLS 1.0', 'TLS 1.1'] %}
+                    <span class="pill high">OUTDATED</span>
+                    {% elif v == 'TLS 1.2' %}
+                    <span class="pill cyan">STANDARD</span>
+                    {% elif v == 'TLS 1.3' %}
+                    <span class="pill good">MODERN</span>
+                    {% else %}
+                    <span class="pill">{{ v }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-small">
+                <i class="fa-solid fa-shield-slash" style="font-size: 24px; margin-bottom: 8px; color: var(--text-secondary);"></i>
+                <p>No TLS ServerHello handshakes observed.</p>
+                <small>Session renegotiation may have occurred outside capture window.</small>
+            </div>
+        {% endif %}
+    </section>
+
+    <!-- Cipher Suites Column -->
+    <section class="panel">
+        <div class="panel-heading">
+            <h2>Negotiated cipher suites</h2>
+            <span class="subtle">CIPHERS</span>
+        </div>
+        {% if protocols.ciphers %}
+            <div style="max-height: 250px; overflow-y: auto;">
+            {% for c, count in protocols.ciphers.items() %}
+            <div class="engine-row">
+                <span class="mono" style="font-size: 11px; word-break: break-all;">{{ c }}</span>
+                <span class="pill purple">{{ count }}</span>
+            </div>
+            {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-small">
+                <p>No negotiated cipher suite metadata in capture.</p>
+            </div>
+        {% endif %}
+        <p class="subtle" style="margin-top: 15px; font-size: 11px;">
+            <i class="fa-solid fa-user-shield"></i> HTTPS application content remains encrypted; payload data is never inspected.
+        </p>
+    </section>
+</div>
+
+<!-- Findings Table -->
+<section class="panel">
+    <div class="panel-heading">
+        <h2>Evidence-backed security observations</h2>
+        <span class="subtle">{{ protocols.findings|length }} OBSERVATIONS</span>
+    </div>
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Packet #</th>
+                    <th>Source IP</th>
+                    <th>Destination IP</th>
+                    <th>Security Finding</th>
+                    <th>Severity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in protocols.findings %}
+                <tr>
+                    <td class="mono">
+                        <a href="{{ url_for('packets', analysis_id=analysis.id, packet_number=f.packet) }}">
+                            #{{ f.packet }} ↗
+                        </a>
+                    </td>
+                    <td class="mono">{{ f.source }}</td>
+                    <td class="mono">{{ f.destination }}</td>
+                    <td>
+                        <span class="amber">
+                            <i class="fa-solid fa-circle-exclamation"></i> {{ f.finding }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="pill {{ 'high' if f.kind == 'danger' else 'medium' }}">
+                            {{ f.kind|upper }}
+                        </span>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="empty-small">
+                        <i class="fa-solid fa-circle-check good" style="font-size: 20px; margin-bottom: 6px;"></i>
+                        <p>No cleartext HTTP credentials or obsolete TLS configurations established in this capture.</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Methodological Distinctions -->
+<div class="split-grid">
+    <section class="panel">
+        <div class="panel-heading">
+            <h2>What Network Captures Establish</h2>
+        </div>
+        <p>Analysis relies strictly on observable wire signals:</p>
+        <ul style="color: var(--text-secondary); padding-left: 20px; font-size: 13px;">
+            <li>Cleartext protocols (HTTP, DNS, Telnet) exposing commands or URLs</li>
+            <li>Negotiated TLS protocol version in plaintext ServerHello responses</li>
+            <li>Cipher suite agreed upon between client and server</li>
+            <li>Destination port activity (e.g., port 80 cleartext vs port 443 encrypted)</li>
+        </ul>
+    </section>
+
+    <section class="panel">
+        <div class="panel-heading">
+            <h2>Investigation Boundaries</h2>
+        </div>
+        <p>To preserve accuracy, this system acknowledges analysis limits:</p>
+        <ul style="color: var(--text-secondary); padding-left: 20px; font-size: 13px;">
+            <li>Encrypted HTTPS payloads cannot and will not be decrypted or read</li>
+            <li>Traffic on port 443 without handshake metadata cannot be assumed to be TLS</li>
+            <li>Missing handshake metadata indicates uncaptured initial packets, not insecurity</li>
+            <li>Zero-day detection cannot be claimed merely from protocol absence</li>
+        </ul>
+    </section>
+</div>
+
+{% else %}
+<div class="empty-state">
+    <i class="fa-solid fa-network-wired"></i>
+    <h2>No protocol data available</h2>
+    <p>Upload and analyze a PCAP file to inspect protocol distribution, TLS versions, and cleartext channels.</p>
+    <a class="btn btn-cyber-primary" href="{{ url_for('schoolnet.analysis_page') }}">
+        <i class="fa-solid fa-upload"></i> Analyze PCAP Capture
+    </a>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if protocols and protocols.protocols %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    schoolChart('protocol-security-chart', 'doughnut', {{ protocols.protocols|tojson }});
+});
+</script>
+{% endif %}
+{% endblock %}

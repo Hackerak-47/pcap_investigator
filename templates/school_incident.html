@@ -1,0 +1,303 @@
+{% extends 'base.html' %}
+{% block content %}
+
+{# ── Page heading ─────────────────────────────────────────────────────────────── #}
+<div class="page-heading">
+    <p class="eyebrow mono">{{ incident.id }}</p>
+    <h1>
+        <span class="heading-dot"></span>{{ incident.source_ip }}
+    </h1>
+    <p class="subtle">
+        {{ incident.device_role }} &rarr; {{ incident.destination_ip }}
+    </p>
+    <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem;">
+        {% if incident.risk == 'High' %}
+            <span class="pill high">High</span>
+        {% elif incident.risk == 'Medium' %}
+            <span class="pill medium">Medium</span>
+        {% else %}
+            <span class="pill low">Low</span>
+        {% endif %}
+        <span class="subtle" style="font-size: 0.8rem;">
+            priority &middot; {{ incident.confirmation }}
+        </span>
+    </div>
+</div>
+
+{# ── Four metric cards ────────────────────────────────────────────────────────── #}
+<div class="metric-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 1.5rem;">
+
+    <div class="metric">
+        <span class="metric-label subtle">Risk level</span>
+        <span class="metric-value"
+              style="color: {% if incident.risk == 'High' %}var(--red){% elif incident.risk == 'Medium' %}var(--amber){% else %}var(--green){% endif %};">
+            {{ incident.risk }}
+        </span>
+    </div>
+
+    <div class="metric">
+        <span class="metric-label subtle">Device role</span>
+        <span class="metric-value" style="font-size: 1rem;">
+            {{ incident.device_role or '—' }}
+        </span>
+    </div>
+
+    <div class="metric">
+        <span class="metric-label subtle">Evidence signals</span>
+        <span class="metric-value">{{ incident.evidence | length }}</span>
+    </div>
+
+    <div class="metric">
+        <span class="metric-label subtle">Observed window</span>
+        <span class="metric-value" style="font-size: 0.85rem; line-height: 1.6;">
+            {{ incident.first_seen | epoch if incident.first_seen else '—' }}
+            <br>
+            <span class="subtle" style="font-size: 0.75rem;">
+                to {{ incident.last_seen | epoch if incident.last_seen else '—' }}
+            </span>
+        </span>
+    </div>
+
+</div>
+
+{# ── Split grid: Risk assessment + Investigation workflow ─────────────────────── #}
+<div class="split-grid" style="margin-bottom: 1.5rem;">
+
+    {# Left — Risk assessment #}
+    <div class="panel">
+        <h2 style="font-size: 1rem; color: var(--cyan); margin-bottom: 1rem;">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>Risk assessment
+        </h2>
+
+        {% if incident.reasons %}
+            {% for reason in incident.reasons %}
+                <p class="subtle" style="margin-bottom: 0.5rem; font-size: 0.9rem;">
+                    <i class="fa-solid fa-circle-dot me-2" style="color: var(--amber);"></i>
+                    {{ reason }}
+                </p>
+            {% endfor %}
+        {% else %}
+            <p class="subtle">No specific reasons recorded.</p>
+        {% endif %}
+
+        <hr style="border-color: var(--line); margin: 1rem 0;">
+
+        <div class="engine-row">
+            <span class="subtle">First observed</span>
+            <span class="mono" style="font-size: 0.85rem;">
+                {{ incident.first_seen | epoch if incident.first_seen else '—' }}
+            </span>
+        </div>
+        <div class="engine-row">
+            <span class="subtle">Last observed</span>
+            <span class="mono" style="font-size: 0.85rem;">
+                {{ incident.last_seen | epoch if incident.last_seen else '—' }}
+            </span>
+        </div>
+    </div>
+
+    {# Right — Investigation workflow #}
+    <div class="panel">
+        <h2 style="font-size: 1rem; color: var(--cyan); margin-bottom: 1rem;">
+            <i class="fa-solid fa-magnifying-glass me-2"></i>Investigation workflow
+        </h2>
+
+        <form method="POST"
+              action="{{ url_for('schoolnet.incident', iid=incident.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="form-grid" style="gap: 1rem;">
+                <div>
+                    <label class="form-label subtle" style="font-size: 0.8rem;">Status</label>
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="open"
+                            {% if incident.status == 'open' %}selected{% endif %}>
+                            Open
+                        </option>
+                        <option value="investigating"
+                            {% if incident.status == 'investigating' %}selected{% endif %}>
+                            Investigating
+                        </option>
+                        <option value="resolved"
+                            {% if incident.status == 'resolved' %}selected{% endif %}>
+                            Resolved
+                        </option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="form-label subtle" style="font-size: 0.8rem;">
+                        Analyst determination
+                    </label>
+                    <select name="confirmation" class="form-select form-select-sm">
+                        <option value="unconfirmed"
+                            {% if incident.confirmation == 'unconfirmed' %}selected{% endif %}>
+                            Unconfirmed
+                        </option>
+                        <option value="confirmed"
+                            {% if incident.confirmation == 'confirmed' %}selected{% endif %}>
+                            Confirmed
+                        </option>
+                        <option value="benign"
+                            {% if incident.confirmation == 'benign' %}selected{% endif %}>
+                            Benign
+                        </option>
+                    </select>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-cyber-primary btn-sm mt-3">
+                <i class="fa-solid fa-floppy-disk me-2"></i>Update
+            </button>
+        </form>
+    </div>
+
+</div>
+
+{# ── Evidence timeline ────────────────────────────────────────────────────────── #}
+<div class="panel" style="margin-bottom: 1.5rem;">
+    <h2 style="font-size: 1rem; color: var(--cyan); margin-bottom: 1.25rem;">
+        <i class="fa-solid fa-timeline me-2"></i>Evidence timeline
+    </h2>
+
+    {% if incident.evidence %}
+        {% for item in incident.evidence %}
+        <div class="evidence-row">
+
+            {# Left column: kind, timestamp, reference #}
+            <div class="evidence-row__meta">
+                {% if item.kind == 'ml' %}
+                    <span class="pill purple">ml</span>
+                {% elif item.kind == 'rule' %}
+                    <span class="pill cyan">rule</span>
+                {% elif item.kind == 'policy' %}
+                    <span class="pill amber">policy</span>
+                {% else %}
+                    <span class="pill">{{ item.kind }}</span>
+                {% endif %}
+
+                <small class="subtle d-block mt-1">
+                    {{ item.time | epoch if item.time else '—' }}
+                </small>
+                <small class="mono subtle d-block" style="font-size: 0.72rem;">
+                    {{ item.reference }}
+                </small>
+            </div>
+
+            {# Right column: type, description, packets, score #}
+            <div class="evidence-row__detail">
+                <p style="font-weight: 600; margin-bottom: 0.25rem; color: var(--text-primary);">
+                    {{ item.type | replace('_', ' ') }}
+                </p>
+                <p class="subtle" style="margin-bottom: 0.35rem; font-size: 0.88rem;">
+                    {{ item.description }}
+                </p>
+
+                {% if item.packets %}
+                    {% set shown = item.packets[:30] %}
+                    <p style="font-size: 0.78rem; margin-bottom: 0.25rem;">
+                        <span class="subtle">Packets: </span>
+                        <span class="mono">
+                            {{ shown | join(', ') }}{% if item.packets | length > 30 %}&nbsp;&hellip;{% endif %}
+                        </span>
+                    </p>
+                {% endif %}
+
+                {% if item.kind == 'ml' and item.score is not none %}
+                    <p style="font-size: 0.78rem; margin-bottom: 0;">
+                        <span class="subtle">Anomaly score: </span>
+                        <span class="mono" style="color: var(--purple);">
+                            {{ "%.4f" | format(item.score) }}
+                        </span>
+                    </p>
+                {% endif %}
+            </div>
+
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-small">
+            <span class="subtle">No evidence signals recorded for this incident.</span>
+        </div>
+    {% endif %}
+</div>
+
+{# ── AI investigation panel ───────────────────────────────────────────────────── #}
+<div class="panel intelligence-panel" style="margin-bottom: 1.5rem;">
+    <div style="display: flex; align-items: center; justify-content: space-between;
+                flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem;">
+        <h2 style="font-size: 1rem; color: var(--cyan); margin: 0;">
+            <i class="fa-solid fa-robot me-2"></i>AI investigation
+        </h2>
+
+        <form method="POST"
+              action="{{ url_for('schoolnet.incident', iid=incident.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="investigate">
+            <button type="submit" class="btn-ai">
+                <i class="fa-solid fa-wand-magic-sparkles me-2"></i>Investigate evidence
+            </button>
+        </form>
+    </div>
+
+    {% if incident.ai_result %}
+
+        {# Mode pill #}
+        {% if incident.ai_result.mode %}
+            <span class="pill purple" style="margin-bottom: 1rem; display: inline-block;">
+                {{ incident.ai_result.mode }}
+            </span>
+        {% endif %}
+
+        {# Error notice #}
+        {% if incident.ai_result.error %}
+            <div class="notice" style="margin-bottom: 1rem;">
+                <i class="fa-solid fa-circle-exclamation me-2" style="color: var(--red);"></i>
+                {{ incident.ai_result.error }}
+            </div>
+        {% endif %}
+
+        {# The seven structured sections #}
+        {% set ai_sections = [
+            ('incident_summary',           'Incident Summary'),
+            ('observed_behaviour',         'Observed Behaviour'),
+            ('supporting_evidence',        'Supporting Evidence'),
+            ('possible_explanation',       'Possible Explanation'),
+            ('potential_impact',           'Potential Impact'),
+            ('confidence_and_uncertainty', 'Confidence & Uncertainty'),
+            ('recommended_steps',          'Recommended Steps')
+        ] %}
+
+        {% for key, title in ai_sections %}
+            {% if incident.ai_result[key] %}
+            <div class="investigation-section">
+                <h3>{{ title }}</h3>
+                <p class="pre-wrap subtle">{{ incident.ai_result[key] }}</p>
+            </div>
+            {% endif %}
+        {% endfor %}
+
+        {# References #}
+        {% if incident.ai_result.references %}
+            <div class="investigation-section">
+                <h3>References</h3>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem;">
+                    {% for ref in incident.ai_result.references %}
+                        <code class="hash">{{ ref }}</code>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+
+    {% else %}
+        <p class="subtle" style="font-size: 0.9rem;">
+            No AI analysis has been run yet for this incident. Click
+            <strong style="color: var(--cyan);">Investigate evidence</strong> above to
+            send the correlated signals to the AI engine for triage, behavioural
+            assessment, and recommended next steps.
+        </p>
+    {% endif %}
+
+</div>
+
+{% endblock %}
