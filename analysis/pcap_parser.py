@@ -2,7 +2,7 @@
 analysis/pcap_parser.py - PCAP file parsing using PyShark
 Extracts packet metadata and stores in SQLite via SQLAlchemy.
 """
-
+#read pcap file and extract packet info
 import logging
 import os
 from datetime import datetime, timezone

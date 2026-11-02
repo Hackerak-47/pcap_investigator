@@ -7,7 +7,7 @@ from flask import Flask
 from database.database import db,init_app
 from database.models import Analysis,Packet,ThreatEvent
 from database.school_models import *
-from schoolnet.flows import build_flows
+from schoolnet.flows import build_flows,refresh_policy_findings
 from schoolnet.ml import train_baseline,score_analysis
 from schoolnet.incidents import correlate_incidents
 from schoolnet.crypto import encrypt,decrypt,sign,verify_signature
@@ -55,6 +55,19 @@ def test_approved_policy(app):
     analysis();db.session.add_all([Device(ip='10.0.0.1',name='Lab',role='Student PC'),Device(ip='10.0.0.2',name='Office',role='Admin PC'),CommunicationPolicy(source_role='Student PC',destination_ip='10.0.0.2',destination_port=80)])
     for n in range(3): packet('test',n+1,sp=1000+n)
     db.session.commit();assert not any(f.policy_finding for f in build_flows('test'))
+
+def test_policy_approval_reevaluates_current_incidents_without_deleting_evidence(app):
+    analysis();db.session.add_all([Device(ip='10.0.0.1',name='Lab',role='Student PC'),Device(ip='10.0.0.2',name='Office',role='Admin PC')])
+    for n in range(3): packet('test',n+1,sp=1000+n)
+    db.session.commit();build_flows('test');correlate_incidents('test')
+    before=Incident.query.one();before.status='investigating';db.session.commit()
+    assert any(item['kind']=='policy' for item in before.evidence)
+    db.session.add(CommunicationPolicy(source_role='Student PC',destination_ip='10.0.0.2'))
+    db.session.commit();assert refresh_policy_findings('test')>0;correlate_incidents('test')
+    after=db.session.get(Incident,before.id)
+    assert after is not None and after.status=='investigating' and after.confirmation=='unconfirmed'
+    assert not any(f.policy_finding for f in Flow.query.filter_by(analysis_id='test'))
+    assert any(item['kind']=='policy-history' for item in after.evidence)
 
 def test_training_separation_and_reload(app):
     for name in ['train','evaluate','duplicate']: analysis(name,'train' if name=='duplicate' else name)

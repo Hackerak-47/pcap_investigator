@@ -1,4 +1,8 @@
-"""Bidirectional, timeout-bounded flows retaining original packet references."""
+"""Bidirectional,
+Groups packets into network flows.
+Calculates the eight behavioural features.
+Provides numerical data for the ML model.
+timeout-bounded flows retaining original packet references."""
 from collections import defaultdict
 from database.database import db
 from database.models import Packet
@@ -8,6 +12,29 @@ import config
 ROLES = ('Student PC', 'Teacher PC', 'Admin PC', 'School Server')
 FEATURES = ['duration', 'packet_count', 'bytes_sent', 'bytes_received', 'unique_destination_ips',
             'unique_destination_ports', 'failed_connections', 'connection_frequency']
+
+def policy_finding_for_flow(flow, devices, policies, window):
+    """Return an active role-policy finding using saved flow evidence; never touch packets."""
+    src=devices.get(flow.src_ip);dst=devices.get(flow.dst_ip)
+    approved=any(p.source_role==flow.source_role and p.destination_ip==flow.dst_ip and
+                 (p.destination_port is None or p.destination_port==flow.dst_port) for p in policies)
+    connections=round((flow.features or {}).get('connection_frequency',0)*window)
+    if src and dst and flow.source_role=='Student PC' and flow.destination_role in ('Admin PC','School Server') and not approved and connections>=3:
+        return 'Repeated student access to a registered sensitive device without an approved relationship; review legitimacy.'
+    return None
+
+def refresh_policy_findings(analysis_id):
+    """Explicitly refresh only policy findings for an existing analysis from current approvals."""
+    from database.school_models import AnalysisContext
+    context=db.session.get(AnalysisContext,analysis_id)
+    window=(context.window_seconds if context and context.window_seconds else config.FLOW_WINDOW)
+    devices={d.ip:d for d in Device.query.all()};policies=CommunicationPolicy.query.all();changed=0
+    for flow in Flow.query.filter_by(analysis_id=analysis_id).all():
+        finding=policy_finding_for_flow(flow,devices,policies,window)
+        if flow.policy_finding!=finding:
+            flow.policy_finding=finding;changed+=1
+    db.session.commit()
+    return changed
 
 def flags(p):
     try: return int(p.tcp_flags or '0', 16)
@@ -61,12 +88,8 @@ def build_flows(analysis_id, window=None):
                  unique_destination_ports=len(w['ports']-{None}),connection_frequency=w['connections']/window)
         src=devices.get(f['src_ip']);dst=devices.get(f['dst_ip'])
         f['source_role']=src.role if src else 'Unknown';f['destination_role']=dst.role if dst else 'Unknown'
-        approved=any(p.source_role==f['source_role'] and p.destination_ip==f['dst_ip'] and
-                     (p.destination_port is None or p.destination_port==f['dst_port']) for p in policies)
-        if src and dst and src.role=='Student PC' and dst.role in ('Admin PC','School Server') and not approved:
-            if w['connections']>=3:
-                f['policy_finding']='Repeated student access to a registered sensitive device without an approved relationship; review legitimacy.'
         obj=Flow(**f);db.session.add(obj);objects.append(obj)
+        obj.policy_finding=policy_finding_for_flow(obj,devices,policies,window)
     for (ip,start),w in windows.items():
         db.session.add(DeviceWindow(analysis_id=analysis_id,ip=ip,start=start,features={
             'packet_count':w['packets'],'bytes_sent':w['sent'],'bytes_received':w['received'],

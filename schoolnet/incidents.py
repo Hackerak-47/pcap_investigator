@@ -1,4 +1,6 @@
-"""Correlate evidence by source and bounded time; never automatically confirm attacks."""
+"""Correlate evidence by source and bounded time;
+Groups related findings into incidents.
+Helps determine incident priority and maintain incident information.never automatically confirm attacks."""
 import json,uuid,ipaddress
 from database.database import db
 from database.models import ThreatEvent
@@ -25,6 +27,7 @@ def correlate_incidents(analysis_id):
             groups[-1].append(item)
         else: groups.append([item])
     devices={d.ip:d for d in Device.query.all()}
+    active_policy_refs={f'flow:{f.id}' for f in Flow.query.filter_by(analysis_id=analysis_id).filter(Flow.policy_finding.isnot(None))}
     for group in groups:
         unique={(x['kind'],x['reference']):x for x in group};group=list(unique.values())
         source=group[0]['source'];refs=sorted(x['kind']+x['reference'] for x in group)
@@ -44,4 +47,16 @@ def correlate_incidents(analysis_id):
         times=[x['time'] for x in group if x['time'] is not None];ends=[x['end'] for x in group if x['end'] is not None]
         obj.first_seen=min(times) if times else None;obj.last_seen=max(ends) if ends else obj.first_seen
         obj.risk=risk;obj.reasons=reasons;obj.evidence=group
+    # Keep past policy evidence, but make its current approved state explicit instead of leaving a stale violation.
+    for obj in Incident.query.filter_by(analysis_id=analysis_id).all():
+        evidence=[dict(item) for item in (obj.evidence or [])];changed=False
+        for item in evidence:
+            if item.get('kind')=='policy' and item.get('reference') not in active_policy_refs:
+                item['kind']='policy-history';item['type']='ROLE_POLICY_REEVALUATED'
+                item['description']='Historical role-policy observation; the relationship is currently approved and no longer an active policy violation.'
+                changed=True
+        if changed:
+            obj.evidence=evidence
+            obj.reasons=[r for r in (obj.reasons or []) if r!='Repeated access outside an approved school-device relationship.']
+            obj.reasons.append('Historical policy evidence retained; current policy evaluation shows the relationship is approved.')
     db.session.commit()

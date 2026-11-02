@@ -1,6 +1,6 @@
 """
 analysis/threat_detector.py - Modular rule-based threat detection engine.
-
+detect suspicious activities using predefined rules 
 Each detector is independent and returns a list of structured threat event dicts.
 All thresholds come from config.py.
 """

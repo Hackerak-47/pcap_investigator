@@ -1,4 +1,7 @@
-"""Backend-only AI engine supporting Google Gemini API, OpenAI, and SQLite-grounded deterministic fallback."""
+"""Backend-only AI engine supporting Google Gemini API
+Prepares evidence-based investigation reports.
+Helps explain incidents and answer investigation questions.
+and SQLite-grounded deterministic fallback."""
 import json, re, ipaddress
 from database.database import db
 from database.models import Analysis, ThreatEvent
@@ -66,29 +69,10 @@ def ask_gemini(context, question):
     )
     user_content = json.dumps({'question': question, 'evidence': context})
 
-    # 1. Try google-genai official SDK
-    try:
-        from google import genai
-        from google.genai import types
-        client = genai.Client(api_key=config.GEMINI_API_KEY)
-        resp = client.models.generate_content(
-            model=config.GEMINI_MODEL,
-            contents=user_content,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                response_mime_type='application/json',
-                temperature=0.1,
-                max_output_tokens=2500
-            )
-        )
-        return json.loads(resp.text)
-    except Exception:
-        pass
-
-    # 2. Fallback to direct Gemini REST API via requests
+    # One bounded request; authentication stays out of URLs and logs.
     import requests
     model = config.GEMINI_MODEL
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={config.GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     payload = {
         "systemInstruction": {"parts": [{"text": system_instruction}]},
         "contents": [{"parts": [{"text": user_content}]}],
@@ -98,11 +82,16 @@ def ask_gemini(context, question):
             "maxOutputTokens": 2500
         }
     }
-    r = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
+    r = requests.post(url, json=payload, headers={"Content-Type": "application/json", "x-goog-api-key": config.GEMINI_API_KEY}, timeout=(5, 40))
+    if r.status_code != 200:
+        messages = {400: 'AI request rejected; check the model and API key.', 401: 'AI authentication failed.',
+                    403: 'AI access denied; check API key permissions.', 404: 'Configured AI model is unavailable.',
+                    429: 'AI quota or rate limit reached; check the provider account.'}
+        raise RuntimeError(messages.get(r.status_code, 'AI provider unavailable; try again later.'))
     if r.status_code == 200:
         candidates = r.json().get('candidates', [])
         if candidates and 'content' in candidates[0]:
-            text = candidates[0]['content']['parts'][0]['text']
+            text = ''.join(p.get('text', '') for p in candidates[0]['content'].get('parts', []) if not p.get('thought'))
             return json.loads(text)
     return None
 
@@ -134,22 +123,17 @@ def ask_openai(context, question):
 
 def ask_provider(context, question):
     """Route to selected AI provider (Gemini or OpenAI) with fallback and schema verification."""
-    provider = (config.AI_PROVIDER or 'gemini').lower()
+    provider = (config.AI_PROVIDER or 'none').lower()
+    if provider == 'none':
+        return None
     result = None
 
-    # Priority 1: Google Gemini (if configured as provider or key present)
-    if provider in ('gemini', 'google') or (config.GEMINI_API_KEY and provider != 'openai'):
-        try:
-            result = ask_gemini(context, question)
-        except Exception:
-            result = None
-
-    # Priority 2: OpenAI / Compatible endpoint
-    if not result and (provider in ('openai', 'compatible') or config.OPENAI_API_KEY):
-        try:
-            result = ask_openai(context, question)
-        except Exception:
-            result = None
+    if provider in ('gemini', 'google'):
+        result = ask_gemini(context, question)
+    elif provider in ('openai', 'compatible'):
+        result = ask_openai(context, question)
+    else:
+        raise ValueError('Unsupported AI provider')
 
     if not result:
         return None
@@ -206,7 +190,7 @@ def investigate(incident):
             'error': error
         }
     else:
-        provider_name = 'Google Gemini' if (config.AI_PROVIDER in ('gemini', 'google') or config.GEMINI_API_KEY) else 'AI-Assisted'
+        provider_name = 'Google Gemini' if config.AI_PROVIDER in ('gemini', 'google') else 'OpenAI-compatible AI'
         result['mode'] = f'{provider_name} interpretation — analyst validation required'
 
     incident.ai_result = result

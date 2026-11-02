@@ -1,7 +1,7 @@
 """
 ai/investigator.py - AI-assisted investigation module.
-
-Supports OpenAI-compatible LLM API (when API key configured).
+ai report
+Supports gemini-compatible LLM API (when API key configured).
 Falls back to deterministic rule-based summary if no API key.
 """
 

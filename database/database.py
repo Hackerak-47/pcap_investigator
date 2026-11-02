@@ -1,5 +1,5 @@
 """
-database/database.py - Flask-SQLAlchemy setup
+database/database.py - Flask-SQLAlchemy setup (database connections )
 """
 
 from flask_sqlalchemy import SQLAlchemy

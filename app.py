@@ -30,7 +30,7 @@ from datetime import datetime
 
 from flask import (
     Flask, abort, flash, jsonify, redirect, render_template,
-    request, send_file, url_for,
+    request, send_file, url_for, session,
 )
 from werkzeug.exceptions import RequestEntityTooLarge
 
@@ -245,18 +245,20 @@ def upload_page():
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
+    def upload_error(message, status=400):
+        if request.accept_mimetypes.best == 'application/json':
+            return jsonify(error=message), status
+        flash(message, 'error')
+        return redirect(url_for('schoolnet.analysis_page'))
     if "pcap_file" not in request.files:
-        flash("No file selected.", "error")
-        return redirect(url_for("upload_page"))
+        return upload_error("No file selected.")
 
     file = request.files["pcap_file"]
     if file.filename == "":
-        flash("No file selected.", "error")
-        return redirect(url_for("upload_page"))
+        return upload_error("No file selected.")
 
     if not allowed_file(file.filename):
-        flash("Invalid file type. Only .pcap and .pcapng files are accepted.", "error")
-        return redirect(url_for("upload_page"))
+        return upload_error("Invalid file type. Only .pcap and .pcapng files are accepted.")
 
     # Generate unique safe filename
     safe_name = secure_filename_safe(file.filename)
@@ -266,15 +268,13 @@ def upload_file():
         file.save(filepath)
     except Exception as e:
         logger.error("Failed to save upload: %s", e)
-        flash("Failed to save uploaded file.", "error")
-        return redirect(url_for("upload_page"))
+        return upload_error("Failed to save uploaded file.", 500)
 
     # Validate magic bytes
     is_valid, err_msg = validate_pcap_file(filepath, config.MAX_UPLOAD_MB)
     if not is_valid:
         os.remove(filepath)
-        flash(f"File validation failed: {err_msg}", "error")
-        return redirect(url_for("upload_page"))
+        return upload_error(f"File validation failed: {err_msg}")
 
     file_size = os.path.getsize(filepath)
 
@@ -293,6 +293,8 @@ def upload_file():
 
     from schoolnet.pipeline import initialize_context
     initialize_context(analysis_id, filepath, request.form.get("provenance", "uploaded"))
+
+    session["selected_analysis_id"] = analysis_id
 
     # Start background analysis
     t = threading.Thread(
@@ -546,6 +548,45 @@ def analyses_list():
     return render_template("analyses.html", analyses=all_analyses)
 
 
+@app.route("/analyses/<analysis_id>/delete", methods=["POST"])
+def delete_analysis(analysis_id):
+    """Remove one capture and all derived records from the local workspace."""
+    analysis = _get_analysis_or_404(analysis_id)
+    if analysis.status in ("pending", "processing"):
+        flash("Wait for this analysis to finish before removing it.", "warning")
+        return redirect(url_for("analyses_list"))
+
+    from database.school_models import (AnalysisContext, Flow, DeviceWindow, Anomaly,
+                                        Incident, ChatMessage, SecureReport)
+    report_filenames = [r.filename for r in SecureReport.query.filter_by(analysis_id=analysis_id).all() if r.filename]
+    upload_path = os.path.abspath(os.path.join(config.UPLOAD_FOLDER, analysis.filename))
+    upload_root = os.path.abspath(config.UPLOAD_FOLDER) + os.sep
+
+    # Child tables without ORM relationships must be cleared explicitly.
+    for model in (AnalysisContext, Anomaly, Incident, ChatMessage, SecureReport, Flow, DeviceWindow):
+        model.query.filter_by(analysis_id=analysis_id).delete(synchronize_session=False)
+    db.session.delete(analysis)
+    db.session.commit()
+
+    if upload_path.startswith(upload_root) and os.path.isfile(upload_path):
+        try:
+            os.remove(upload_path)
+        except OSError:
+            logger.warning("Could not remove local capture file %s", upload_path)
+    for report_filename in report_filenames:
+        report_path = os.path.abspath(os.path.join(config.REPORTS_FOLDER, report_filename))
+        report_root = os.path.abspath(config.REPORTS_FOLDER) + os.sep
+        if report_path.startswith(report_root) and os.path.isfile(report_path):
+            try:
+                os.remove(report_path)
+            except OSError:
+                logger.warning("Could not remove generated report %s", report_path)
+    if session.get("selected_analysis_id") == analysis_id:
+        session.pop("selected_analysis_id", None)
+    flash(f"Removed capture '{analysis.original_filename}' and its derived local results.", "success")
+    return redirect(url_for("analyses_list"))
+
+
 # ─── JSON API Endpoints ───────────────────────────────────────────────────────
 
 @app.route("/api/analysis/<analysis_id>")
@@ -691,6 +732,8 @@ def _count_by_type(events) -> dict:
 
 from schoolnet.routes import bp as schoolnet_bp
 app.register_blueprint(schoolnet_bp)
+from schoolnet.health import check_page
+app.add_url_rule('/check', 'check_page', check_page, methods=['GET', 'POST'])
 from schoolnet.auth import install_security
 install_security(app)
 

@@ -1,6 +1,7 @@
 """
 analysis/traffic_analyzer.py - High-level traffic statistics
 """
+#analysis network traffic patterns
 
 import logging
 from collections import Counter
@@ -20,7 +21,7 @@ def get_traffic_stats(analysis_id: str) -> dict:
     if not packets:
         return _empty_stats()
 
-    protocol_counter = Counter()
+    protocol_counter = Counter()//how many times each value occur
     src_ip_counter = Counter()
     dst_ip_counter = Counter()
     dst_port_counter = Counter()

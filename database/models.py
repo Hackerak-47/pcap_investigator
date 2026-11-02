@@ -1,5 +1,5 @@
 """
-database/models.py - SQLAlchemy ORM models
+database/models.py - SQLAlchemy ORM models define tabke and structure 
 """
 
 from datetime import datetime

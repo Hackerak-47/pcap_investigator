@@ -11,6 +11,10 @@ from database.database import db
 from database.school_models import Flow, ModelRecord, Anomaly, AnalysisContext
 from schoolnet.flows import FEATURES
 import config
+'''Trains the Isolation Forest using baseline flow features.
+Saves the trained model and preprocessing pipeline.
+Loads the saved model to score new captures.
+Stores anomaly findings in the database.'''
 
 def matrix(flows):
     return np.array([[f.features.get(k,np.nan) if f.features.get(k) is not None else np.nan for k in FEATURES] for f in flows],dtype=float)

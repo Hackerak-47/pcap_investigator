@@ -1,4 +1,7 @@
-"""Evidence-backed protocol inventory; missing handshake metadata is not insecurity."""
+"""Evidence-backed protocol inventory; 
+Inspects observable protocol information.
+Checks TLS versions, cipher information, and visible HTTP security issues.
+missing handshake metadata is not insecurity."""
 from collections import Counter
 from database.models import Packet
 

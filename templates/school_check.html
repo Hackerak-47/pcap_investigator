@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-heading"><div><h1>System check</h1><p>Check local readiness and verify a live AI response before your demonstration.</p></div></div>
+<section class="panel"><h2>Local features</h2>
+<div class="table-responsive"><table><thead><tr><th>Feature</th><th>Status</th><th>Details</th></tr></thead><tbody>
+{% for name,status,detail in checks %}<tr><td>{{ name }}</td><td>{{ status }}</td><td>{{ detail }}</td></tr>{% endfor %}
+</tbody></table></div><p>Readiness checks do not guarantee detection accuracy. Complete a capture analysis to review its findings.</p></section>
+<section class="panel"><h2>Live AI connection</h2><p>Provider: {{ provider }} · Model: {{ model_name }}</p>
+<p>This test sends a small synthetic flow to the configured provider. It does not send your uploaded capture.</p>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-ai" type="submit">Test live AI</button></form>
+{% if ai_check %}<h3>{{ ai_check.status }}</h3><p>{{ ai_check.detail }}</p><p class="subtle">Last test: {{ ai_check.time }} · {{ ai_check.model }}</p>
+{% else %}<p>Not tested in this browser session. Offline evidence summaries remain available.</p>{% endif %}
+</section><a class="btn btn-outline-info" href="{{ url_for('schoolnet.overview') }}">Open dashboard</a>
+{% endblock %}

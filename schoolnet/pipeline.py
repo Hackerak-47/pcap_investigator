@@ -2,6 +2,8 @@ import hashlib
 from database.database import db
 from database.school_models import AnalysisContext
 import config
+'''Coordinates the different stages of PCAP analysis.
+Connects packet/flow analysis, rule detections, ML scoring, and other enrichment steps.'''
 
 def file_hash(path):
     h=hashlib.sha256()

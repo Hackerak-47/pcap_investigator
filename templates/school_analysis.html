@@ -14,6 +14,9 @@
             evaluate behavioural signals, and correlate security incidents
             automatically.
         </p>
+        <p class="subtle small" style="margin-top: 0.5rem; max-width: 620px;">
+            A capture is one uploaded PCAP and its own results. After upload, this page opens that new capture automatically. A normal baseline capture first extracts flows; train it from Anomaly Detection, then evaluate a different capture against it.
+        </p>
     </div>
     <span class="pill cyan" style="align-self: flex-start; margin-top: 0.25rem;">
         PCAP&nbsp;/&nbsp;PCAPNG
@@ -201,8 +204,8 @@
         id="analysis-status"
         data-id="{{ analysis.id }}"
         data-status="{{ analysis.status }}"
-        style="display: none;"
-    ></div>
+        style="display: {% if analysis.status in ['pending', 'processing'] %}block{% else %}none{% endif %};"
+    >Processing {{ analysis.original_filename }}…</div>
 
     {# Summary metric strip #}
     <div

@@ -105,8 +105,8 @@
 <!-- Finalized Reports Archive -->
 <section class="panel">
     <div class="panel-heading">
-        <h2>Finalized report versions</h2>
-        <span class="subtle">{{ reports|length }} STORED DOSSIERS</span>
+        <h2>Current report</h2>
+        <span class="subtle">{{ 'CURRENT WORKING DOSSIER' if reports else 'NO REPORT YET' }}</span>
     </div>
 
     {% if reports %}
@@ -134,7 +134,10 @@
                 </div>
 
                 <button class="btn btn-sm btn-cyber-primary" data-verify="{{ url_for('schoolnet.report_action', rid=r.id, action='verify') }}">
-                    <i class="fa-solid fa-certificate"></i> Verify integrity & signature
+                    <i class="fa-solid fa-certificate"></i> Check archived report
+                </button>
+                <button class="btn btn-sm btn-outline-danger" data-verify="{{ url_for('schoolnet.report_action', rid=r.id, action='tamper-test') }}" title="Tests only an altered copy in memory">
+                    <i class="fa-solid fa-shield-halved"></i> Simulate tampered copy
                 </button>
             </div>
 
@@ -144,6 +147,11 @@
             </div>
 
             <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <form method="post" enctype="multipart/form-data" action="{{ url_for('schoolnet.report_action', rid=r.id, action='verify-upload') }}" data-report-upload style="display: flex; gap: 8px; align-items: center;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="file" name="report_file" required accept="{{ '.sna' if r.encrypted else '.pdf' }}" aria-label="Report copy to verify">
+                    <button class="btn btn-sm btn-outline-info" type="submit"><i class="fa-solid fa-file-shield"></i> Upload & verify copy</button>
+                </form>
                 <!-- Download raw file -->
                 <form method="post" action="{{ url_for('schoolnet.report_action', rid=r.id, action='download') }}" style="display: inline;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -174,6 +182,7 @@
             </div>
 
             <output class="verification-result"></output>
+            <small class="subtle">The uploaded file is verification input only. It never replaces or modifies the archived report or selected capture.</small>
         </article>
         {% endfor %}
     {% else %}

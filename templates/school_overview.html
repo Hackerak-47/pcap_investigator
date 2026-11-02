@@ -24,7 +24,7 @@
             <option value="">— select a capture —</option>
             {% for a in analyses %}
             <option value="{{ a.id }}" {% if analysis and a.id == analysis.id %}selected{% endif %}>
-                {{ a.original_filename }} &mdash; {{ a.created_at | epoch }}
+                {{ a.original_filename }} &mdash; added {{ a.created_at | epoch }}
             </option>
             {% endfor %}
         </select>
@@ -48,16 +48,23 @@
 {% if not context %}
 <div class="notice mb-4">
     <i class="fa-solid fa-circle-info me-2" style="color: var(--amber);"></i>
+    {% if source_available %}
     <span>
-        This capture has not been enriched with ML or flow analysis yet.
+        This capture has packet and rule results, but has not been enriched with ML or flow analysis yet.
         Extend the analysis to unlock the full detection engine.
     </span>
     <form method="POST" action="{{ url_for('schoolnet.enrich') }}" class="d-inline ms-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="analysis_id" value="{{ analysis.id }}">
         <button type="submit" class="btn btn-sm btn-outline-info">
             Extend this analysis
         </button>
     </form>
+    {% else %}
+    <span>
+        This is an imported legacy demo record. Its raw PCAP is not available in the local uploads folder, so ML and flow analysis cannot be added to this record. You can still inspect its stored packets and rule evidence. Re-upload the same PCAP to analyse it fully.
+    </span>
+    {% endif %}
 </div>
 {% endif %}
 

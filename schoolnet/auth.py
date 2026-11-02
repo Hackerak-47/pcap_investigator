@@ -1,4 +1,6 @@
-"""Administrator session protection. Local-only mode is explicit when unconfigured."""
+"""Administrator session protection.
+Handles authentication-related checks and session/security protections.
+Local-only mode is explicit when unconfigured."""
 import secrets,hmac
 from flask import request,session,redirect,url_for,abort
 import config

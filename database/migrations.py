@@ -1,4 +1,4 @@
-"""Versioned, additive SQLite migrations. Never drop existing evidence tables."""
+""" helps data base schema changes Versioned, additive SQLite migrations. Never drop existing evidence tables."""
 from sqlalchemy import text, inspect
 from database.database import db
 

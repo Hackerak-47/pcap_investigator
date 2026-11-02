@@ -1,4 +1,7 @@
-"""Authenticated report encryption and detached RSA-PSS signatures."""
+"""Authenticated report encryption and
+Handles report encryption and decryption.
+Uses AES-256-GCM, SHA-256, and RSA-PSS according to the project design.
+detached RSA-PSS signatures."""
 import base64,hashlib,io,os,uuid
 from pathlib import Path
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -61,3 +64,70 @@ def verify_report(report):
                 'signature':verify_signature(data,report.signature,report.public_key),'encryption':'authenticated' if report.encrypted else 'not encrypted'}
     except Exception:
         return {'sha256':'unavailable','signature':'unavailable','encryption':'Decryption failed: key unavailable, incorrect or file altered'}
+
+def verify_uploaded_report(report, filename, blob):
+    """Verify a supplied copy solely against immutable metadata saved at finalization."""
+    if not report.sha256 or len(report.sha256) != 64:
+        return {'valid':False,'message':'Verification metadata is missing the trusted report hash.'}
+    if not report.signature or not report.public_key:
+        return {'valid':False,'message':'Verification metadata is missing the trusted RSA-PSS signature or public key.'}
+    if not blob:
+        return {'valid':False,'message':'The uploaded report is empty.'}
+    expected_suffix = '.sna' if report.encrypted else '.pdf'
+    suffix = Path(filename or '').suffix.lower()
+    if suffix != expected_suffix:
+        return {'valid':False,'message':f'Invalid report format: this archived report expects a {expected_suffix} file.',
+                'sha256':'unavailable','signature':'unavailable'}
+    if report.encrypted:
+        if not blob.startswith(b'SNA1'):
+            return {'valid':False,'message':'Invalid encrypted report format.', 'sha256':'unavailable','signature':'unavailable','encryption':'failed'}
+        try:
+            data = decrypt(blob, aes_key())
+        except Exception:
+            return {'valid':False,'message':'Encrypted report authentication failed: the file is corrupted, altered, or cannot be decrypted.',
+                    'sha256':'unavailable','signature':'unavailable','encryption':'failed'}
+        encryption = 'authenticated'
+    else:
+        data = blob
+        if not data.startswith(b'%PDF-'):
+            return {'valid':False,'message':'Invalid PDF report format.', 'sha256':'unavailable','signature':'unavailable','encryption':'not encrypted'}
+        encryption = 'not encrypted'
+    hash_status = 'valid' if hashlib.sha256(data).hexdigest() == report.sha256 else 'invalid'
+    signature_status = verify_signature(data, report.signature, report.public_key)
+    valid = hash_status == 'valid' and signature_status == 'valid'
+    if valid:
+        message = 'Verification succeeded: the uploaded copy matches the archived report and its RSA-PSS signature.'
+    else:
+        failures=[]
+        if hash_status != 'valid': failures.append('SHA-256 hash comparison failed')
+        if signature_status != 'valid': failures.append('RSA-PSS signature verification failed')
+        message = 'Verification failed: ' + '; '.join(failures) + '.'
+    return {'valid':valid,'message':message,'sha256':hash_status,'signature':signature_status,'encryption':encryption}
+
+def simulate_tamper_test(report):
+    """Verify an altered in-memory copy without ever changing the saved report."""
+    blob=Path(config.REPORTS_FOLDER,report.filename).read_bytes()
+    if not blob:
+        return {'result':'unable to test','detail':'The saved report is empty.'}
+    altered=bytearray(blob)
+    altered[-1]^=1
+    if report.encrypted:
+        try:
+            decrypt(bytes(altered),aes_key())
+        except Exception:
+            return {
+                'result':'tampering detected',
+                'sha256':'unavailable',
+                'signature':'unavailable',
+                'encryption':'authentication failed: altered encrypted copy was blocked',
+                'stored_report':'unchanged'
+            }
+        return {'result':'unable to test','detail':'Unexpected encrypted-copy result.','stored_report':'unchanged'}
+    data=bytes(altered)
+    return {
+        'result':'tampering detected',
+        'sha256':'invalid' if hashlib.sha256(data).hexdigest()!=report.sha256 else 'valid',
+        'signature':verify_signature(data,report.signature,report.public_key),
+        'encryption':'not encrypted',
+        'stored_report':'unchanged'
+    }

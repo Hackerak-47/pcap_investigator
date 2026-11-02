@@ -1,4 +1,7 @@
-"""SchoolNet pages and APIs extend the original Flask application."""
+"""SchoolNet pages
+Connects dashboard actions and browser requests to backend functions.
+For example, receiving a PCAP upload or requesting an incident page.
+and APIs extend the original Flask application."""
 import ipaddress,io,json,os
 from collections import Counter
 from datetime import datetime,timezone
@@ -17,8 +20,11 @@ def selected():
     if aid:
         a=db.session.get(Analysis,aid)
         if not a: abort(404)
+        session['selected_analysis_id'] = a.id
         return a
-    return Analysis.query.order_by(Analysis.created_at.desc()).first()
+    remembered = session.get('selected_analysis_id')
+    a = db.session.get(Analysis, remembered) if remembered else None
+    return a or Analysis.query.order_by(Analysis.created_at.desc()).first()
 
 def page(template,**kwargs):
     a=kwargs.pop('analysis',None) or selected()
@@ -54,9 +60,11 @@ def overview():
     devices=set(p[0] for p in db.session.query(Packet.src_ip).filter_by(analysis_id=a.id).distinct() if p[0]) | set(p[0] for p in db.session.query(Packet.dst_ip).filter_by(analysis_id=a.id).distinct() if p[0]) if a else set()
     activity=Counter()
     for f in flows: activity[f.src_ip]+=f.features['bytes_sent'];activity[f.dst_ip]+=f.features['bytes_received']
+    source_available = bool(a and os.path.isfile(os.path.join(config.UPLOAD_FOLDER, a.filename)))
     return page('school_overview.html',analysis=a,incidents=sorted(incidents,key=lambda x:x.first_seen or 0,reverse=True),
         totals={'packets':a.packet_count if a else 0,'devices':len(devices),'incidents':len(incidents),'anomalies':anomalies,'high':sum(i.risk=='High' for i in incidents)},
-        protocols=protocols,risk_counts=dict(Counter(i.risk for i in incidents)),activity=dict(activity.most_common(8)),flow_count=len(flows))
+        protocols=protocols,risk_counts=dict(Counter(i.risk for i in incidents)),activity=dict(activity.most_common(8)),flow_count=len(flows),
+        source_available=source_available)
 
 @bp.route('/analysis')
 def analysis_page():
@@ -73,16 +81,25 @@ def status(aid):
 @bp.route('/enrich',methods=['POST'])
 def enrich():
     a=require_analysis()
-    if a.status!='complete': abort(400,description='Complete parsing first')
+    if a.status!='complete':
+        flash('This capture is still processing. Wait for parsing to finish before extending the analysis.','warning')
+        return redirect(url_for('schoolnet.overview',analysis_id=a.id))
     path=os.path.join(config.UPLOAD_FOLDER,a.filename)
     if not os.path.exists(path):
-        flash('Original capture unavailable. Legacy synthetic records remain accessible in the packet explorer.','warning')
+        flash('The raw PCAP for this imported demo is no longer in the local uploads folder. Stored packets and rule evidence remain available; re-upload the same PCAP to create a new analysis with flow and ML results.','warning')
     else:
-        from schoolnet.pipeline import enrich_analysis
-        from schoolnet.incidents import correlate_incidents
-        enrich_analysis(a.id,path);correlate_incidents(a.id)
-        ctx=db.session.get(AnalysisContext,a.id);ctx.progress=100;ctx.stage='Complete';db.session.commit()
-        flash('Flow, anomaly and incident analysis updated.','success')
+        try:
+            from schoolnet.pipeline import enrich_analysis
+            from schoolnet.incidents import correlate_incidents
+            enrich_analysis(a.id,path);correlate_incidents(a.id)
+            ctx=db.session.get(AnalysisContext,a.id)
+            if ctx:
+                ctx.progress=100;ctx.stage='Complete'
+            db.session.commit()
+            flash('Flow, anomaly and incident analysis updated.','success')
+        except Exception as exc:
+            db.session.rollback()
+            flash('Extended analysis could not finish: '+type(exc).__name__+'. Stored packet and rule evidence are unchanged.','error')
     return redirect(url_for('schoolnet.overview',analysis_id=a.id))
 
 @bp.route('/devices',methods=['GET','POST'])
@@ -128,7 +145,15 @@ def policies():
             port=int(port) if port else None
             if role not in ROLES or (port is not None and not 1<=port<=65535): raise ValueError('Invalid role or port')
             db.session.add(CommunicationPolicy(source_role=role,destination_ip=ip,destination_port=port))
-        db.session.commit();flash('Communication policy saved for future analyses.','success')
+        db.session.commit()
+        a=selected()
+        if a:
+            from schoolnet.flows import refresh_policy_findings
+            from schoolnet.incidents import correlate_incidents
+            changed=refresh_policy_findings(a.id);correlate_incidents(a.id)
+            flash(f'Communication policy saved. Policy evaluation refreshed for this capture ({changed} flow finding(s) changed); rule and ML evidence were preserved.','success')
+        else:
+            flash('Communication policy saved. Select a capture to reevaluate its policy findings.','success')
     except ValueError as exc: flash(str(exc),'error')
     return redirect(url_for('schoolnet.devices',analysis_id=request.form.get('analysis_id') or None))
 
@@ -201,14 +226,27 @@ def reports():
             create_report(a.id,request.form.get('encrypt')=='yes',request.form.get('sign')=='yes');flash('Report version finalized.','success')
         except Exception as exc: flash('Report generation failed: '+str(exc)[:200],'error')
         return redirect(url_for('schoolnet.reports',analysis_id=a.id if a else None))
-    return page('school_reports.html',analysis=a,reports=SecureReport.query.filter_by(analysis_id=a.id).order_by(SecureReport.created_at.desc()).all() if a else [])
+    # Keep this workspace focused on the report currently being worked on.
+    reports=SecureReport.query.filter_by(analysis_id=a.id).order_by(SecureReport.created_at.desc()).limit(1).all() if a else []
+    return page('school_reports.html',analysis=a,reports=reports)
 
 @bp.route('/report/<rid>/<action>',methods=['POST'])
 def report_action(rid,action):
     r=db.session.get(SecureReport,rid)
     if not r: abort(404)
-    from schoolnet.crypto import verify_report,report_bytes
+    from schoolnet.crypto import verify_report,report_bytes,simulate_tamper_test
     if action=='verify': return jsonify(verify_report(r))
+    if action=='verify-upload':
+        uploaded=request.files.get('report_file')
+        if not uploaded or not uploaded.filename:
+            return jsonify(valid=False,message='Choose a report file to verify.'),400
+        limit=config.MAX_UPLOAD_MB*1024*1024
+        blob=uploaded.stream.read(limit+1)
+        if len(blob)>limit:
+            return jsonify(valid=False,message=f'Report exceeds the {config.MAX_UPLOAD_MB} MB verification limit.'),400
+        from schoolnet.crypto import verify_uploaded_report
+        return jsonify(verify_uploaded_report(r,uploaded.filename,blob))
+    if action=='tamper-test': return jsonify(simulate_tamper_test(r))
     if action=='download': return send_file(os.path.join(config.REPORTS_FOLDER,r.filename),as_attachment=True,download_name=r.filename,mimetype='application/octet-stream' if r.filename.endswith('.sna') else 'application/pdf')
     if action=='decrypt':
         try: return send_file(io.BytesIO(report_bytes(r)),as_attachment=True,download_name=r.id+'.pdf',mimetype='application/pdf')
